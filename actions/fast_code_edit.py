@@ -7,7 +7,6 @@ that patch locally. Ambiguous or multi-file work belongs to dev_agent.
 from __future__ import annotations
 
 import os
-import re
 import tempfile
 import time
 from pathlib import Path
@@ -116,7 +115,7 @@ def fast_code_edit(parameters: dict, player=None, speak=None) -> str:
                 return (f"Fast edit rejected: the replacement would create a "
                         f"Python syntax error at line {exc.lineno}: {exc.msg}")
 
-        backup_dir = _base_dir() / ".yon_backups"
+        backup_dir = root / ".yon_backups"
         backup_dir.mkdir(parents=True, exist_ok=True)
         stamp = time.strftime("%Y%m%d-%H%M%S")
         backup = backup_dir / f"{target.name}.{stamp}-{time.time_ns() % 1000000:06d}.bak"
@@ -138,7 +137,7 @@ def fast_code_edit(parameters: dict, player=None, speak=None) -> str:
             raise
 
         elapsed_ms = (time.perf_counter() - started) * 1000
-        return (f"Fast edit applied to {target.relative_to(_base_dir())}. "
+        return (f"Fast edit applied to {target.relative_to(root)}. "
                 f"One exact replacement; backup saved; "
                 f"{'Python syntax verified; ' if target.suffix.lower() == '.py' else ''}"
                 f"local edit time {elapsed_ms:.1f} ms. "
@@ -151,22 +150,21 @@ TOOL = {
     "name": "fast_code_edit",
     "description": (
         "FAST LOCAL CODE EDITOR for SIMPLE, SMALL changes to ONE existing file. "
-        "Use this INSTEAD OF dev_agent when the requested change is a small, "
-        "unambiguous one-file edit AND you already know the exact existing source "
-        "text and exact replacement (for example changing one window-title string, "
-        "label, colour literal, constant or setting). This action performs no model "
-        "generation: it checks that the exact fragment occurs once, makes a backup, "
-        "writes atomically and checks Python syntax. Supply path relative to the "
-        "project folder, exact find_text, replace_text, and optional folder. "
-        "Do NOT guess source text or paths. If you need to inspect/investigate, "
-        "if the fragment is unknown/ambiguous, if more than one file is needed, "
-        "or if the change requires design/refactoring/testing, use dev_agent instead. "
-        "A successful file edit does not hot-reload a module already running."
+        "Use this INSTEAD OF dev_agent for a small, unambiguous one-file change. "
+        "If you do not know the exact source fragment, first call mode='search' "
+        "with a distinctive code token; this reads local source files only and "
+        "does not modify them. Then call mode='replace' with the exact unique "
+        "fragment, replacement and relative path. The replace mode makes a backup, "
+        "writes atomically and validates Python syntax. Do NOT guess source text "
+        "or paths. For multi-file work, investigation, debugging or refactoring, "
+        "use dev_agent. A successful file edit does not hot-reload running modules."
     ),
     "parameters": {
         "type": "OBJECT",
         "properties": {
-            "path": {"type": "STRING", "description": "Target file path relative to the project folder."},
+            "mode": {"type": "STRING", "description": "'search' to locate code without changing files; 'replace' to apply one exact replacement."},
+            "query": {"type": "STRING", "description": "Search mode: distinctive code token, such as setWindowTitle."},
+            "path": {"type": "STRING", "description": "Replace mode: target file path relative to the project folder."},
             "find_text": {"type": "STRING", "description": "Exact existing source fragment; it must occur exactly once."},
             "replace_text": {"type": "STRING", "description": "Exact replacement source fragment."},
             "folder": {"type": "STRING", "description": "Optional absolute project folder. Defaults to the Yon application folder."}
@@ -174,6 +172,6 @@ TOOL = {
         "required": []
     },
     "tier": "core",
-    "brief": "Apply one exact, unique local source replacement with backup and syntax validation.",
+    "brief": "Search local source or apply one exact, unique replacement with backup and syntax validation.",
     "handler": fast_code_edit,
 }
