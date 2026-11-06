@@ -877,9 +877,9 @@ class JarvisLive:
                     ),
                 )
             result = str(raw or "Done.")
-            status = "completed" if not result.startswith(
-                ("Tool '", "Plugin '", "Action '")
-            ) else "failed"
+            status = "failed" if result.lower().startswith(
+                ("tool '", "plugin '", "action '", "search failed", "failed:")
+            ) else "completed"
 
             if (
                 name == "web_search"
