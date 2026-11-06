@@ -7528,7 +7528,7 @@ class JarvisUI:
         self._app.setStyle("Fusion")
         self._win = MainWindow(face_path)
         self.root = _RootShim(self._app, self._win)
-        self._win.show()
+        self._win.showMaximized()
 
     @property
     def muted(self) -> bool:
