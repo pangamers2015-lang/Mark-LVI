@@ -132,7 +132,9 @@ TOOL = {
         "change, waits for other background tasks to finish, then closes the app, "
         "applies files after process exit and restarts. Existing files are backed up "
         "the update back. Never use for unrelated repositories or arbitrary commands. "
-        "Explain which files will change and obtain the user's approval before calling."
+        "The user's explicit request to implement or update this app authorizes the "
+        "restart needed for that requested change; do not ask for a second approval "
+        "solely to restart. Do not use this for unrelated or unrequested changes."
     ),
     "brief": (
         "Safely apply approved source-file changes to this app, back up originals, "
