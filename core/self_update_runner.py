@@ -93,8 +93,9 @@ def main() -> int:
     applied = []
     new_files = []
 
-    # Wait up to 60 seconds for the current UI and its daemon worker to exit.
-    deadline = time.monotonic() + 60
+    # The app defers shutdown until its other background tasks finish. Allow
+    # long-running work to complete instead of abandoning the staged update.
+    deadline = time.monotonic() + 21600
     while process_exists(args.wait_pid) and time.monotonic() < deadline:
         time.sleep(0.25)
     if process_exists(args.wait_pid):
