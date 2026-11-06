@@ -94,27 +94,27 @@ _OS = platform.system()  # "Windows" | "Darwin" | "Linux"
 
 
 class C:
-    BG        = "#00060a"
-    PANEL     = "#010d14"
-    PANEL2    = "#010f18"
-    BORDER    = "#0d3347"
-    BORDER_B  = "#1a5c7a"
-    BORDER_A  = "#0f4060"
-    PRI       = "#00d4ff"
-    PRI_DIM   = "#007a99"
-    PRI_GHO   = "#001f2e"
-    ACC       = "#ff6b00"
-    ACC2      = "#ffcc00"
-    GREEN     = "#00ff88"
-    GREEN_D   = "#00aa55"
-    RED       = "#ff3355"
-    MUTED_C   = "#ff3366"
-    TEXT      = "#8ffcff"
-    TEXT_DIM  = "#3a8a9a"
-    TEXT_MED  = "#5ab8cc"
-    WHITE     = "#d8f8ff"
-    DARK      = "#000d14"
-    BAR_BG    = "#011520"
+    BG        = "#050607"
+    PANEL     = "#101316"
+    PANEL2    = "#15191c"
+    BORDER    = "#293238"
+    BORDER_B  = "#40545a"
+    BORDER_A  = "#34464b"
+    PRI       = "#62ddcf"
+    PRI_DIM   = "#318f88"
+    PRI_GHO   = "#102624"
+    ACC       = "#d8b66b"
+    ACC2      = "#e5ce83"
+    GREEN     = "#62ddcf"
+    GREEN_D   = "#329b90"
+    RED       = "#ff6677"
+    MUTED_C   = "#e87991"
+    TEXT      = "#edf2f2"
+    TEXT_DIM  = "#788589"
+    TEXT_MED  = "#b4c0c2"
+    WHITE     = "#ffffff"
+    DARK      = "#080a0c"
+    BAR_BG    = "#202629"
 
 
 # Keys tied to the accent colour — status colours (ACC, GREEN, RED…) stay fixed
@@ -4394,6 +4394,79 @@ class RemoteKeyOverlay(QWidget):
         self.closed.emit()
 
 
+class _TaskHoverCard(QFrame):
+    """Compact task chip that expands on hover without covering the workspace."""
+    def __init__(self, record: dict, parent=None):
+        super().__init__(parent)
+        self.setMouseTracking(True)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setStyleSheet(
+            "QFrame { background: rgba(14,18,21,238); border: 1px solid #39474b; "
+            "border-left: 3px solid #62ddcf; border-radius: 15px; }"
+        )
+        self._expanded = False
+        self._layout = QVBoxLayout(self)
+        self._layout.setContentsMargins(11, 7, 11, 7)
+        self._layout.setSpacing(4)
+        top = QHBoxLayout()
+        self._icon = QLabel("◌")
+        self._icon.setStyleSheet("color:#62ddcf; font-size:17px; background:transparent; border:0;")
+        top.addWidget(self._icon)
+        self._title = QLabel()
+        self._title.setStyleSheet("color:#f1f5f5; font-size:12px; font-weight:600; background:transparent; border:0;")
+        self._title.setWordWrap(False)
+        top.addWidget(self._title, 1)
+        self._state = QLabel()
+        self._state.setStyleSheet("color:#62ddcf; font-size:9px; background:transparent; border:0;")
+        top.addWidget(self._state)
+        self._layout.addLayout(top)
+        self._detail = QLabel()
+        self._detail.setWordWrap(True)
+        self._detail.setStyleSheet("color:#b4c0c2; font-size:10px; background:transparent; border:0;")
+        self._layout.addWidget(self._detail)
+        self._progress = QProgressBar()
+        self._progress.setTextVisible(False)
+        self._progress.setFixedHeight(5)
+        self._progress.setStyleSheet("QProgressBar { background:#293236; border:0; border-radius:2px; } QProgressBar::chunk { background:#62ddcf; border-radius:2px; }")
+        self._layout.addWidget(self._progress)
+        self.update_record(record)
+        self._collapse()
+
+    def update_record(self, record: dict):
+        self._record = dict(record)
+        self._title.setText(str(record.get("name") or "Tarefa em segundo plano")[:36])
+        status = str(record.get("status") or "running").lower()
+        labels = {"running":"EM EXECUÇÃO", "queued":"NA FILA", "waiting":"AGUARDANDO", "interrupted":"INTERROMPIDA"}
+        self._state.setText(labels.get(status, status.upper()))
+        self._detail.setText(str(record.get("stage") or record.get("current_step") or record.get("description") or record.get("summary") or "Trabalhando em segundo plano")[:180])
+        progress = record.get("progress")
+        has_progress = isinstance(progress, (int, float)) and not isinstance(progress, bool)
+        self._progress.setVisible(has_progress)
+        if has_progress:
+            self._progress.setValue(max(0, min(100, int(progress))))
+        if self._expanded:
+            self.setFixedHeight(96 if has_progress else 82)
+
+    def _collapse(self):
+        self._expanded = False
+        self._detail.hide()
+        self._progress.hide()
+        self.setFixedHeight(46)
+
+    def enterEvent(self, event):
+        self._expanded = True
+        self._detail.show()
+        if self._progress.maximum() >= 0 and self._progress.isVisible() is False:
+            p = self._record.get("progress")
+            self._progress.setVisible(isinstance(p, (int, float)) and not isinstance(p, bool))
+        self.setFixedHeight(96 if self._progress.isVisible() else 82)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self._collapse()
+        super().leaveEvent(event)
+
+
 class MainWindow(QMainWindow):
     _log_sig        = pyqtSignal(str)
     _state_sig      = pyqtSignal(str)
@@ -4431,8 +4504,9 @@ class MainWindow(QMainWindow):
             apply_ui_accent(_ui_color)
 
         self.setWindowTitle(f"{_display} — {APP_VERSION}")
-        self.setMinimumSize(_MIN_W, _MIN_H)
-        self.resize(_DEFAULT_W, _DEFAULT_H)
+        self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.FramelessWindowHint)
+        self.setMinimumSize(900, 560)
+        self.resize(1280, 800)
 
         screen = QApplication.primaryScreen().availableGeometry()
         self.move(
@@ -4466,7 +4540,8 @@ class MainWindow(QMainWindow):
         root = QVBoxLayout(central)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
-        root.addWidget(self._build_header())
+        self._legacy_header = self._build_header()
+        root.addWidget(self._legacy_header)
 
         body = QHBoxLayout()
         body.setContentsMargins(0, 0, 0, 0)
@@ -4660,7 +4735,19 @@ class MainWindow(QMainWindow):
         body.addWidget(self._right_panel, stretch=0)
 
         root.addLayout(body, stretch=1)
-        root.addWidget(self._build_footer())
+        self._legacy_footer = self._build_footer()
+        root.addWidget(self._legacy_footer)
+
+        # Minimal immersive presentation: retain the existing widgets and
+        # controls, but keep the reference-style HUD as the visible workspace.
+        self._legacy_header.hide()
+        self._legacy_footer.hide()
+        self._left_panel.hide()
+        self._right_panel.hide()
+        self._content_panel.hide()
+        self._quiz_panel.hide()
+        self._visual_root = central
+        self._build_immersive_overlay(central)
 
         # Quick-access drawer (floating overlay, built after central widget layout is done)
         self._quick_drawer = self._build_quick_drawer()
@@ -5553,6 +5640,115 @@ class MainWindow(QMainWindow):
             lay.addWidget(lbl)
 
         return w
+    @staticmethod
+    def _context_glyph(title: str) -> str:
+        value = str(title or "").lower()
+        if any(x in value for x in ("futebol", "bola", "jogo", "partida", "flamengo")):
+            return "⚽"
+        if any(x in value for x in ("tempo", "clima", "previsão")):
+            return "☀"
+        if any(x in value for x in ("instagram", "rede social", "comentários")):
+            return "◎"
+        if any(x in value for x in ("arquivo", "windows", "aplicativo", "programa")):
+            return "▣"
+        return "✦"
+
+    def _build_immersive_overlay(self, parent: QWidget) -> None:
+        self._status_pill = QFrame(parent)
+        self._status_pill.setStyleSheet("QFrame { background:rgba(12,16,18,232); border:1px solid #425156; border-radius:27px; }")
+        pill = QHBoxLayout(self._status_pill)
+        pill.setContentsMargins(15, 7, 17, 7)
+        pill.setSpacing(10)
+        orb = QLabel("◉")
+        orb.setStyleSheet("color:#62ddcf; font-size:23px; background:transparent; border:0;")
+        pill.addWidget(orb)
+        names = QVBoxLayout()
+        names.setSpacing(0)
+        name = QLabel(self._assistant_name.upper())
+        name.setStyleSheet("color:#ffffff; font-size:16px; font-weight:700; letter-spacing:4px; background:transparent; border:0;")
+        self._status_state = QLabel("● pronto")
+        self._status_state.setStyleSheet("color:#62ddcf; font-size:11px; letter-spacing:1px; background:transparent; border:0;")
+        names.addWidget(name)
+        names.addWidget(self._status_state)
+        pill.addLayout(names, 1)
+        self._status_bars = QLabel("▂ ▄ ▆ ▇ ▅")
+        self._status_bars.setStyleSheet("color:#62ddcf; font-size:14px; letter-spacing:1px; background:transparent; border:0;")
+        pill.addWidget(self._status_bars)
+
+        self._context_popup = QFrame(parent)
+        self._context_popup.setStyleSheet("QFrame { background:rgba(13,16,18,242); border:1px solid #3c4b50; border-radius:22px; }")
+        popup_layout = QVBoxLayout(self._context_popup)
+        popup_layout.setContentsMargins(18, 16, 18, 16)
+        popup_layout.setSpacing(9)
+        header = QHBoxLayout()
+        self._context_icon = QLabel("✦")
+        self._context_icon.setFixedSize(56, 56)
+        self._context_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._context_icon.setStyleSheet("color:#62ddcf; font-size:30px; background:#20282b; border:1px solid #344348; border-radius:14px;")
+        header.addWidget(self._context_icon)
+        self._context_title = QLabel("Informações do Yon")
+        self._context_title.setWordWrap(True)
+        self._context_title.setStyleSheet("color:#ffffff; font-size:17px; font-weight:700; background:transparent; border:0;")
+        header.addWidget(self._context_title, 1)
+        popup_layout.addLayout(header)
+        self._context_body = QTextEdit()
+        self._context_body.setReadOnly(True)
+        self._context_body.setFrameShape(QFrame.Shape.NoFrame)
+        self._context_body.setStyleSheet("QTextEdit { color:#d0d8d9; background:transparent; border:0; font-size:13px; selection-background-color:#285b56; }")
+        self._context_body.setMinimumHeight(130)
+        popup_layout.addWidget(self._context_body)
+        self._context_popup.hide()
+
+        self._task_overlay_host = QWidget(parent)
+        self._task_overlay_host.setStyleSheet("background:transparent;")
+        self._task_overlay_layout = QVBoxLayout(self._task_overlay_host)
+        self._task_overlay_layout.setContentsMargins(0, 0, 0, 0)
+        self._task_overlay_layout.setSpacing(8)
+        self._task_overlay_cards = {}
+        self._task_overlay_host.hide()
+
+        self._status_tmr = QTimer(self)
+        self._status_tmr.timeout.connect(self._refresh_immersive_status)
+        self._status_tmr.start(350)
+        self._refresh_immersive_status()
+        self._position_immersive_overlays()
+
+    def _refresh_immersive_status(self) -> None:
+        state = str(getattr(self.hud, "state", "READY") or "READY").lower()
+        speaking = bool(getattr(self.hud, "speaking", False))
+        muted = bool(getattr(self.hud, "muted", False))
+        if speaking:
+            label, bars = "respondendo", "▂ ▅ ▇ ▆ ▃"
+        elif muted:
+            label, bars = "microfone desligado", "▁ ▁ ▁ ▁ ▁"
+        elif any(x in state for x in ("think", "process", "work")):
+            label, bars = "pensando", "▁ ▃ ▅ ▃ ▁"
+        else:
+            label, bars = "ouvindo" if state in ("listening", "awake") else "pronto", "▂ ▄ ▆ ▇ ▅"
+        self._status_state.setText("● " + label)
+        self._status_bars.setText(bars)
+
+    def _position_immersive_overlays(self) -> None:
+        if not hasattr(self, "_status_pill"):
+            return
+        w, h = self._visual_root.width(), self._visual_root.height()
+        self._status_pill.adjustSize()
+        pw = max(300, self._status_pill.sizeHint().width())
+        self._status_pill.setGeometry((w-pw)//2, 14, pw, 68)
+        self._status_pill.raise_()
+        self._task_overlay_host.setGeometry(22, max(100, h-160), 330, 142)
+        if self._task_overlay_host.isVisible():
+            self._task_overlay_host.raise_()
+        if self._context_popup.isVisible():
+            cw = min(470, max(330, int(w*0.38)))
+            ch = min(390, max(230, int(h*0.52)))
+            self._context_popup.setGeometry(w-cw-28, max(110, (h-ch)//2), cw, ch)
+            self._context_popup.raise_()
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._position_immersive_overlays()
+
     def _build_tasks_panel(self) -> QWidget:
         panel = QFrame()
         panel.setObjectName("BackgroundTasksPanel")
@@ -5595,77 +5791,26 @@ class MainWindow(QMainWindow):
 
     def _show_background_tasks(self, records) -> None:
         records = records if isinstance(records, list) else []
-        active = [
-            item for item in records
-            if isinstance(item, dict) and str(item.get("status", "")).lower()
-            in {"running", "queued", "waiting", "interrupted"}
-        ][:8]
-        signature = tuple(
-            (item.get("id"), item.get("name"), item.get("status"),
-             item.get("stage") or item.get("current_step") or item.get("description") or item.get("summary"),
-             item.get("progress"))
-            for item in active
-        )
-        if signature == self._tasks_signature:
-            return
-        self._tasks_signature = signature
-        while self._tasks_cards_layout.count():
-            child = self._tasks_cards_layout.takeAt(0)
-            widget = child.widget()
-            if widget is not None:
-                widget.deleteLater()
-        if not active:
-            self._tasks_panel.hide()
-            return
-        self._tasks_heading.setText(f"BACKGROUND TASKS  ·  {len(active)}")
-        for item in active:
-            card = QFrame()
-            card.setStyleSheet(
-                f"QFrame {{ background: {C.DARK}; border: 1px solid {C.BORDER}; border-radius: 3px; }}"
-            )
-            card_layout = QVBoxLayout(card)
-            card_layout.setContentsMargins(6, 5, 6, 5)
-            card_layout.setSpacing(2)
-            top = QHBoxLayout()
-            title = QLabel(str(item.get("name") or "Background task")[:34])
-            title.setWordWrap(True)
-            title.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
-            title.setStyleSheet(f"color: {C.TEXT}; background: transparent; border: none;")
-            top.addWidget(title, 1)
-            status = str(item.get("status") or "running").upper()
-            status_color = C.RED if status == "INTERRUPTED" else C.GREEN
-            state = QLabel(status)
-            state.setFont(QFont("Courier New", 6, QFont.Weight.Bold))
-            state.setStyleSheet(f"color: {status_color}; background: transparent; border: none;")
-            top.addWidget(state)
-            card_layout.addLayout(top)
-            task_id = QLabel(str(item.get("id") or ""))
-            task_id.setFont(QFont("Courier New", 6))
-            task_id.setStyleSheet(f"color: {C.TEXT_DIM}; background: transparent; border: none;")
-            card_layout.addWidget(task_id)
-            detail_text = (item.get("stage") or item.get("current_step")
-                           or item.get("description") or item.get("summary")
-                           or "Executando em segundo plano…")
-            detail = QLabel(str(detail_text)[:180])
-            detail.setWordWrap(True)
-            detail.setFont(QFont("Courier New", 6))
-            detail.setStyleSheet(f"color: {C.TEXT_MED}; background: transparent; border: none;")
-            card_layout.addWidget(detail)
-            progress = item.get("progress")
-            if isinstance(progress, (int, float)) and not isinstance(progress, bool):
-                bar = QProgressBar()
-                bar.setRange(0, 100)
-                bar.setValue(max(0, min(100, int(progress))))
-                bar.setTextVisible(True)
-                bar.setFormat("%p%")
-                bar.setFixedHeight(9)
-                bar.setStyleSheet(
-                    f"QProgressBar {{ background: {C.BAR_BG}; border: 1px solid {C.BORDER}; color: {C.TEXT}; }}"
-                    f"QProgressBar::chunk {{ background: {C.GREEN_D}; }}"
-                )
-                card_layout.addWidget(bar)
-            self._tasks_cards_layout.addWidget(card)
-        self._tasks_panel.show()
+        active = [item for item in records if isinstance(item, dict)
+                  and str(item.get("status", "")).lower()
+                  in {"running", "queued", "waiting", "interrupted"}][:6]
+        current = {str(item.get("id") or index): item for index, item in enumerate(active)}
+        for task_id in list(self._task_overlay_cards):
+            if task_id not in current:
+                card = self._task_overlay_cards.pop(task_id)
+                self._task_overlay_layout.removeWidget(card)
+                card.deleteLater()
+        for task_id, item in current.items():
+            card = self._task_overlay_cards.get(task_id)
+            if card is None:
+                card = _TaskHoverCard(item, self._task_overlay_host)
+                self._task_overlay_cards[task_id] = card
+                self._task_overlay_layout.addWidget(card)
+            else:
+                card.update_record(item)
+        self._task_overlay_host.setVisible(bool(active))
+        self._position_immersive_overlays()
+
 
     def _build_right_panel(self) -> QWidget:
         w = QWidget()
@@ -6103,22 +6248,14 @@ class MainWindow(QMainWindow):
         return w
 
     def _show_content(self, title: str, text: str):
-        """Slot — runs on Qt main thread. Updates and shows the content panel."""
-        import time as _time
-        # The panel opens below the head, so the head looks down at it. It is a
-        # tiny thing that answers "did that land?" before you read a word.
+        """Show a contextual, minimal floating card over the orb."""
         self.hud.glance(0.0, -0.85, hold=1.3)
-        self._content_title_lbl.setText(title.upper()[:48])
-        self._content_ts_lbl.setText(_time.strftime("%H:%M:%S"))
-        self._content_display.setPlainText(text)
-        self._content_display.moveCursor(
-            self._content_display.textCursor().MoveOperation.Start
-        )
-        first_show = not self._content_panel.isVisible()
-        self._content_panel.show()
-        if first_show:
-            total = self._center_split.height()
-            self._center_split.setSizes([max(total - 220, 120), 220])
+        self._context_title.setText(str(title or "Informação")[:64])
+        self._context_icon.setText(self._context_glyph(title))
+        self._context_body.setPlainText(str(text or "")[:12000])
+        self._context_popup.show()
+        self._context_popup.raise_()
+        self._position_immersive_overlays()
 
     # ── the coding agent, live ───────────────────────────────────────────────
     # The panel under the head shows a folder job while it runs: what was asked,
