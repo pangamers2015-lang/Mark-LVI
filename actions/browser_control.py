@@ -531,8 +531,9 @@ class _BrowserSession:
     All browsers open on the real profile via launch_persistent_context.
     """
 
-    def __init__(self, browser_name: str):
+    def __init__(self, browser_name: str, headless: bool = False):
         self.browser_name = browser_name
+        self.headless = bool(headless)
         self._spec        = _resolve_browser(browser_name)
 
         self._loop:    asyncio.AbstractEventLoop | None = None
@@ -625,11 +626,14 @@ class _BrowserSession:
         engine_obj  = getattr(self._pw, engine_name)
 
         if engine_name == "firefox":
-            profile = _firefox_profile_dir() or str(
-                Path.home() / ".jarvis_profiles" / "firefox"
+            profile = (
+                str(Path.home() / ".yon_profiles" / "firefox_headless")
+                if self.headless else
+                (_firefox_profile_dir() or str(Path.home() / ".jarvis_profiles" / "firefox"))
             )
+            Path(profile).mkdir(parents=True, exist_ok=True)
             kwargs: dict = {
-                "headless":    False,
+                "headless":    self.headless,
                 "slow_mo":     0,
                 "viewport":    None,
                 "no_viewport": True,
@@ -650,10 +654,12 @@ class _BrowserSession:
             return
 
         if engine_name == "webkit":
-            safari_profile = str(Path.home() / ".jarvis_profiles" / "safari")
+            safari_profile = str(
+                Path.home() / ".yon_profiles" / ("safari_headless" if self.headless else "safari")
+            )
             Path(safari_profile).mkdir(parents=True, exist_ok=True)
             kwargs = {
-                "headless":    False,
+                "headless":    self.headless,
                 "slow_mo":     0,
                 "viewport":    None,
                 "no_viewport": True,
@@ -664,10 +670,14 @@ class _BrowserSession:
             print(f"[Browser] ✅ Safari launched")
             return
 
-        profile = _real_profile_dir(self.browser_name)
+        profile = (
+            str(Path.home() / ".yon_profiles" / (self.browser_name + "_headless"))
+            if self.headless else _real_profile_dir(self.browser_name)
+        )
+        Path(profile).mkdir(parents=True, exist_ok=True)
 
         kwargs = {
-            "headless":    False,
+            "headless":    self.headless,
             "slow_mo":     0,
             "viewport":    None,
             "no_viewport": True,
@@ -706,7 +716,7 @@ class _BrowserSession:
         # answers in milliseconds, and core/appidentity was already built to
         # ask it. Knowing up front turns a long silence into an immediate,
         # explainable outcome.
-        already = appidentity.running(self.browser_name)
+        already = appidentity.running(self.browser_name) if not self.headless else []
         if already:
             print(f"[Browser] {self.browser_name} is already running "
                   f"({len(already)} processes) — its profile is locked, so the "
