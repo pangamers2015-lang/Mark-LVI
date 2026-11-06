@@ -477,3 +477,50 @@ def pop_last_session() -> dict | None:
         except Exception as e:
             print(f"[Memory] ⚠️ pop_last_session error: {e}")
             return None
+
+# ── Persistent behavior preferences ─────────────────────────────────────────
+
+_BEHAVIOR_BOOLEAN_DEFAULTS = {
+    # Preserve the original MARK LVI behavior until the user changes it.
+    "announce_time_at_startup": True,
+    "deliver_news_at_startup": True,
+}
+
+
+def get_behavior_preferences() -> dict:
+    """Return persisted behavior preferences with safe defaults."""
+    stored = (load_memory().get("preferences", {}) or {})
+    result = {}
+    for key, default in _BEHAVIOR_BOOLEAN_DEFAULTS.items():
+        raw = _entry_value(stored.get(key, "")).lower()
+        if not raw:
+            result[key] = default
+        else:
+            result[key] = raw in {"1", "true", "yes", "on", "enabled"}
+    style = _entry_value(stored.get("startup_greeting_style", ""))
+    if style:
+        result["startup_greeting_style"] = style
+    return result
+
+
+def set_behavior_preferences(preferences: dict) -> dict:
+    """Persist only supported standing behavior preferences."""
+    if not isinstance(preferences, dict):
+        return get_behavior_preferences()
+
+    updates = {}
+    for key in _BEHAVIOR_BOOLEAN_DEFAULTS:
+        value = preferences.get(key)
+        if isinstance(value, bool):
+            updates[key] = {"value": "enabled" if value else "disabled"}
+
+    style = preferences.get("startup_greeting_style")
+    if isinstance(style, str):
+        style = style.strip()
+        if style:
+            updates["startup_greeting_style"] = {"value": style[:160]}
+
+    if updates:
+        update_memory({"preferences": updates})
+    return get_behavior_preferences()
+
