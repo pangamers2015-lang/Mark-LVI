@@ -4398,6 +4398,7 @@ class MainWindow(QMainWindow):
     _log_sig        = pyqtSignal(str)
     _state_sig      = pyqtSignal(str)
     _content_sig    = pyqtSignal(str, str)   # (title, text) — thread-safe content display
+    _tasks_sig      = pyqtSignal(object)     # background-task snapshots from worker loop
     _codejob_sig    = pyqtSignal(object)     # dev_agent job state — live coding panel
     _reconfig_sig   = pyqtSignal()           # trigger setup overlay from any thread
     _camera_sig     = pyqtSignal(bytes)      # show camera frame preview (small overlay)
@@ -4446,6 +4447,7 @@ class MainWindow(QMainWindow):
         self.on_audio_device_change = None  # callable: () -> None — reopen audio streams
         self._confirm_overlay  = None   # live ConfirmBanner, if one is on screen
         self.get_plugins       = None   # callable: () -> list[dict], set by JarvisLive
+        self.get_background_tasks = None  # callable: () -> list[dict], set by JarvisLive
         self.get_plugin_settings = None # callable: () -> list[dict] settings schemas, set by JarvisLive
         self.on_wake_toggle    = None   # callable: (enable: bool) -> str, set by JarvisLive
         self.on_wake_manual    = None   # callable: () -> None — manual sleep/wake
@@ -4679,9 +4681,15 @@ class MainWindow(QMainWindow):
         self._metric_tmr.start(2000)
         self._update_metrics()
 
+        # Background task cards are refreshed from the durable task snapshot.
+        self._tasks_tmr = QTimer(self)
+        self._tasks_tmr.timeout.connect(self._refresh_background_tasks)
+        self._tasks_tmr.start(1000)
+
         self._log_sig.connect(self._log.append_log)
         self._state_sig.connect(self._apply_state)
         self._content_sig.connect(self._show_content)
+        self._tasks_sig.connect(self._show_background_tasks)
         self._codejob_sig.connect(self._show_code_job)
         self._reconfig_sig.connect(self._show_setup)
         self._camera_sig.connect(self._show_camera_frame)
@@ -5545,6 +5553,119 @@ class MainWindow(QMainWindow):
             lay.addWidget(lbl)
 
         return w
+    def _build_tasks_panel(self) -> QWidget:
+        panel = QFrame()
+        panel.setObjectName("BackgroundTasksPanel")
+        panel.setStyleSheet(f"""
+            QFrame#BackgroundTasksPanel {{
+                background: {C.PANEL}; border: 1px solid {C.BORDER_B};
+                border-radius: 3px;
+            }}
+        """)
+        panel.hide()
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(6, 5, 6, 5)
+        layout.setSpacing(4)
+        self._tasks_heading = QLabel("BACKGROUND TASKS")
+        self._tasks_heading.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
+        self._tasks_heading.setStyleSheet(f"color: {C.PRI}; background: transparent;")
+        layout.addWidget(self._tasks_heading)
+        self._tasks_cards = QWidget()
+        self._tasks_cards_layout = QVBoxLayout(self._tasks_cards)
+        self._tasks_cards_layout.setContentsMargins(0, 0, 0, 0)
+        self._tasks_cards_layout.setSpacing(4)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setMaximumHeight(178)
+        scroll.setWidget(self._tasks_cards)
+        layout.addWidget(scroll)
+        self._tasks_signature = None
+        return panel
+
+    def _refresh_background_tasks(self) -> None:
+        getter = self.get_background_tasks
+        if not callable(getter):
+            return
+        try:
+            self._tasks_sig.emit(getter())
+        except Exception as exc:
+            print(f"[UI] Background task refresh failed: {exc}")
+
+    def _show_background_tasks(self, records) -> None:
+        records = records if isinstance(records, list) else []
+        active = [
+            item for item in records
+            if isinstance(item, dict) and str(item.get("status", "")).lower()
+            in {"running", "queued", "waiting", "interrupted"}
+        ][:8]
+        signature = tuple(
+            (item.get("id"), item.get("name"), item.get("status"),
+             item.get("stage") or item.get("current_step") or item.get("description"),
+             item.get("progress"))
+            for item in active
+        )
+        if signature == self._tasks_signature:
+            return
+        self._tasks_signature = signature
+        while self._tasks_cards_layout.count():
+            child = self._tasks_cards_layout.takeAt(0)
+            widget = child.widget()
+            if widget is not None:
+                widget.deleteLater()
+        if not active:
+            self._tasks_panel.hide()
+            return
+        self._tasks_heading.setText(f"BACKGROUND TASKS  ·  {len(active)}")
+        for item in active:
+            card = QFrame()
+            card.setStyleSheet(
+                f"QFrame {{ background: {C.DARK}; border: 1px solid {C.BORDER}; border-radius: 3px; }}"
+            )
+            card_layout = QVBoxLayout(card)
+            card_layout.setContentsMargins(6, 5, 6, 5)
+            card_layout.setSpacing(2)
+            top = QHBoxLayout()
+            title = QLabel(str(item.get("name") or "Background task")[:34])
+            title.setWordWrap(True)
+            title.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
+            title.setStyleSheet(f"color: {C.TEXT}; background: transparent; border: none;")
+            top.addWidget(title, 1)
+            status = str(item.get("status") or "running").upper()
+            status_color = C.RED if status == "INTERRUPTED" else C.GREEN
+            state = QLabel(status)
+            state.setFont(QFont("Courier New", 6, QFont.Weight.Bold))
+            state.setStyleSheet(f"color: {status_color}; background: transparent; border: none;")
+            top.addWidget(state)
+            card_layout.addLayout(top)
+            task_id = QLabel(str(item.get("id") or ""))
+            task_id.setFont(QFont("Courier New", 6))
+            task_id.setStyleSheet(f"color: {C.TEXT_DIM}; background: transparent; border: none;")
+            card_layout.addWidget(task_id)
+            detail_text = (item.get("stage") or item.get("current_step")
+                           or item.get("description") or "Executando em segundo plano…")
+            detail = QLabel(str(detail_text)[:180])
+            detail.setWordWrap(True)
+            detail.setFont(QFont("Courier New", 6))
+            detail.setStyleSheet(f"color: {C.TEXT_MED}; background: transparent; border: none;")
+            card_layout.addWidget(detail)
+            progress = item.get("progress")
+            if isinstance(progress, (int, float)) and not isinstance(progress, bool):
+                bar = QProgressBar()
+                bar.setRange(0, 100)
+                bar.setValue(max(0, min(100, int(progress))))
+                bar.setTextVisible(True)
+                bar.setFormat("%p%")
+                bar.setFixedHeight(9)
+                bar.setStyleSheet(
+                    f"QProgressBar {{ background: {C.BAR_BG}; border: 1px solid {C.BORDER}; color: {C.TEXT}; }}"
+                    f"QProgressBar::chunk {{ background: {C.GREEN_D}; }}"
+                )
+                card_layout.addWidget(bar)
+            self._tasks_cards_layout.addWidget(card)
+        self._tasks_panel.show()
+
     def _build_right_panel(self) -> QWidget:
         w = QWidget()
         w.setFixedWidth(_RIGHT_W)
@@ -5558,6 +5679,10 @@ class MainWindow(QMainWindow):
             l.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
             l.setStyleSheet(f"color: {C.TEXT_MED}; background: transparent;")
             return l
+
+        lay.addWidget(_sec("ACTIVITY LOG"))
+        self._tasks_panel = self._build_tasks_panel()
+        lay.addWidget(self._tasks_panel)
 
         lay.addWidget(_sec("ACTIVITY LOG"))
         self._log = LogWidget()
@@ -7199,6 +7324,10 @@ class _RootShim:
         self._app = app
     def mainloop(self):
         self._app.exec()
+    def after(self, milliseconds: int, callback):
+        QTimer.singleShot(max(0, int(milliseconds)), callback)
+    def quit(self):
+        self._app.quit()
     def protocol(self, *_):
         pass
 
@@ -7329,6 +7458,14 @@ class JarvisUI:
     @property
     def get_plugin_settings(self):
         return self._win.get_plugin_settings
+
+    @property
+    def get_background_tasks(self):
+        return self._win.get_background_tasks
+
+    @get_background_tasks.setter
+    def get_background_tasks(self, callback):
+        self._win.get_background_tasks = callback
 
     @get_plugin_settings.setter
     def get_plugin_settings(self, cb):
