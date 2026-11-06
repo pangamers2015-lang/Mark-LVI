@@ -2141,7 +2141,6 @@ class JarvisLive:
                 self.ui.write_log("SYS: Could not fetch the news for the briefing.")
 
         asyncio.create_task(_deliver_news())
-
     # ── Session memory ──────────────────────────────────────────────────────────
 
     async def _save_session_summary(self) -> None:
