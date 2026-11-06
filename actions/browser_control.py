@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 from core import appidentity, outcome
+from core.page_monitor import wait_for_page_change
 
 # Importing playwright cost 198 ms at every launch, paid by action discovery
 # whether or not a browser was ever opened. It is the second-largest import in
@@ -1232,7 +1233,7 @@ TOOL = {
         "properties": {
             "action": {
                 "type": "STRING",
-                "description": "go_to | search | click | type | scroll | fill_form | smart_click | smart_type | get_text | get_url | press | new_tab | close_tab | screenshot | back | forward | reload | switch | list_browsers | close | close_all"
+                "description": "go_to | search | click | type | scroll | fill_form | smart_click | smart_type | get_text | wait_for_change | get_url | press | new_tab | close_tab | screenshot | back | forward | reload | switch | list_browsers | close | close_all"
             },
             "browser": {
                 "type": "STRING",
@@ -1277,6 +1278,18 @@ TOOL = {
             "path": {
                 "type": "STRING",
                 "description": "Save path for screenshot"
+            },
+            "timeout_ms": {
+                "type": "INTEGER",
+                "description": "Maximum wait for page text changes, 1000-60000 ms (default 30000)."
+            },
+            "quiet_ms": {
+                "type": "INTEGER",
+                "description": "Quiet period before returning updated text, 200-5000 ms (default 900)."
+            },
+            "max_chars": {
+                "type": "INTEGER",
+                "description": "Maximum returned text length (default 8000)."
             },
             "incognito": {
                 "type": "BOOLEAN",
