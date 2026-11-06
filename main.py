@@ -55,6 +55,7 @@ from memory.memory_manager import (
     save_session_summary, pop_last_session,
     search_memory, set_trim_notifier, get_behavior_preferences,
     set_behavior_preferences as persist_behavior_preferences,
+    infer_behavior_preferences_from_text,
 )
 
 # The file-backed tools (open_app, web_search, browser_control, …) are no longer
@@ -1816,6 +1817,21 @@ class JarvisLive:
                                 self._last_out_logged = ""   # new exchange
                                 self.ui.write_log(f"You: {full_in}")
                                 self._session_log.append(f"User: {full_in}")
+
+                                # Persist clear, explicit startup preferences locally.
+                                # This deterministic path does not depend on the model
+                                # deciding to call a memory tool.
+                                behavior_updates = infer_behavior_preferences_from_text(full_in)
+                                if behavior_updates:
+                                    saved_preferences = persist_behavior_preferences(behavior_updates)
+                                    print(
+                                        "[Memory] Startup behavior preferences applied: "
+                                        f"{list(behavior_updates.keys())} -> {saved_preferences}"
+                                    )
+                                    self.ui.write_log(
+                                        "SYS: Saved your startup behavior preferences."
+                                    )
+
                                 if self._dashboard:
                                     asyncio.create_task(self._dashboard.broadcast({
                                         "type": "log", "speaker": "user",
