@@ -4552,6 +4552,9 @@ class MainWindow(QMainWindow):
 
         # Center column: HUD + resizable content panel via QSplitter
         self.hud = HudCanvas(face_path, _display)
+        # The reference interface uses the abstract particle/core presentation,
+        # not the humanoid avatar. Keep the existing HUD engine and audio reactivity.
+        self.hud.hud_style = "orb"
         self.hud.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._content_panel = self._build_content_panel()
         self._quiz_panel = self._build_quiz_panel()
@@ -5674,6 +5677,7 @@ class MainWindow(QMainWindow):
         self._status_bars = QLabel("▂ ▄ ▆ ▇ ▅")
         self._status_bars.setStyleSheet("color:#62ddcf; font-size:14px; letter-spacing:1px; background:transparent; border:0;")
         pill.addWidget(self._status_bars)
+        self._status_pill.show()
 
         self._context_popup = QFrame(parent)
         self._context_popup.setStyleSheet("QFrame { background:rgba(13,16,18,242); border:1px solid #3c4b50; border-radius:22px; }")
