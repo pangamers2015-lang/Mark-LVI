@@ -5392,7 +5392,7 @@ class MainWindow(QMainWindow):
         else:
             self.showFullScreen()
 
-    def resizeEvent(self, event):
+    def _resize_existing_overlays(self, event):
         super().resizeEvent(event)
         cw = self.centralWidget()
         if self._overlay and self._overlay.isVisible():
@@ -5750,7 +5750,7 @@ class MainWindow(QMainWindow):
             self._context_popup.raise_()
 
     def resizeEvent(self, event) -> None:
-        super().resizeEvent(event)
+        self._resize_existing_overlays(event)
         self._position_immersive_overlays()
 
     def _build_tasks_panel(self) -> QWidget:
