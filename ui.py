@@ -4510,8 +4510,8 @@ class MainWindow(QMainWindow):
 
         screen = QApplication.primaryScreen().availableGeometry()
         self.move(
-            (screen.width()  - _DEFAULT_W) // 2,
-            (screen.height() - _DEFAULT_H) // 2,
+            (screen.width()  - self.width()) // 2,
+            (screen.height() - self.height()) // 2,
         )
 
         self.on_text_command   = None
@@ -5740,7 +5740,7 @@ class MainWindow(QMainWindow):
         pw = max(300, self._status_pill.sizeHint().width())
         self._status_pill.setGeometry((w-pw)//2, 14, pw, 68)
         self._status_pill.raise_()
-        self._task_overlay_host.setGeometry(22, max(100, h-160), 330, 142)
+        self._task_overlay_host.setGeometry(22, max(100, h-190), 330, 178)
         if self._task_overlay_host.isVisible():
             self._task_overlay_host.raise_()
         if self._context_popup.isVisible():
