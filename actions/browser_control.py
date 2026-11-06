@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Optional
 
 from core import appidentity, outcome
 from core.page_monitor import wait_for_page_change
+from core.chat_interaction import interact_with_chat
 
 # Importing playwright cost 198 ms at every launch, paid by action discovery
 # whether or not a browser was ever opened. It is the second-largest import in
@@ -879,6 +880,17 @@ class _BrowserSession:
         except Exception as e:
             return f"Could not monitor page changes: {e}"
 
+    async def chat_message(
+        self, message: str, input_selector: str = "",
+        send_selector: str = "", confirm_send: bool = False,
+    ) -> str:
+        """Find a chat composer, fill it, and send only after explicit approval."""
+        page = await self._get_page()
+        return await interact_with_chat(
+            page, message=message, input_selector=input_selector,
+            send_selector=send_selector, confirm_send=confirm_send,
+        )
+
     async def get_url(self) -> str:
         page = await self._get_page()
         return page.url
@@ -1193,6 +1205,13 @@ def browser_control(
                 selector=params.get("selector", "body"),
                 max_chars=int(params.get("max_chars", 8_000)),
             ), timeout=65)
+        elif action == "chat_message":
+            result = sess.run(sess.chat_message(
+                message=params.get("message", ""),
+                input_selector=params.get("input_selector", ""),
+                send_selector=params.get("send_selector", ""),
+                confirm_send=bool(params.get("confirm_send", False)),
+            ))
         elif action == "get_url":
             result = sess.run(sess.get_url())
         elif action == "press":
@@ -1232,7 +1251,7 @@ TOOL = {
     "scheduling": "WHEN_IDLE",
     "name": "browser_control",
     "description": (
-        "Controls the web browser: open an address, search, click, type, "
+        "Controls the web browser: open an address, search, click, type, prepare chat messages, send approved messages, 
         "scroll, read the page, manage tabs, go back and forward. "
         "THIS TOOL OPENS THE BROWSER ITSELF. Never call open_app for the "
         "browser first - doing both launches it twice, the second copy on a "
@@ -1254,7 +1273,7 @@ TOOL = {
         "properties": {
             "action": {
                 "type": "STRING",
-                "description": "go_to | search | click | type | scroll | fill_form | smart_click | smart_type | get_text | wait_for_change | get_url | press | new_tab | close_tab | screenshot | back | forward | reload | switch | list_browsers | close | close_all"
+                "description": "go_to | search | click | type | scroll | fill_form | smart_click | smart_type | get_text | wait_for_change | chat_message | get_url | press | new_tab | close_tab | screenshot | back | forward | reload | switch | list_browsers | close | close_all"
             },
             "browser": {
                 "type": "STRING",
@@ -1299,6 +1318,22 @@ TOOL = {
             "path": {
                 "type": "STRING",
                 "description": "Save path for screenshot"
+            },
+            "message": {
+                "type": "STRING",
+                "description": "Message to place in the detected chat composer."
+            },
+            "input_selector": {
+                "type": "STRING",
+                "description": "Optional CSS selector for the exact chat message field."
+            },
+            "send_selector": {
+                "type": "STRING",
+                "description": "Optional CSS selector for the exact send button."
+            },
+            "confirm_send": {
+                "type": "BOOLEAN",
+                "description": "Must be true only after the user explicitly approved sending this exact message. Otherwise the message is only prepared in the field."
             },
             "timeout_ms": {
                 "type": "INTEGER",
