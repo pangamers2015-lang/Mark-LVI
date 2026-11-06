@@ -1082,7 +1082,7 @@ class _SessionRegistry:
                 closed.append(label)
         if self._active_browser == browser_name:
             self._active_browser = ""
-        return f"{browser_name} closed ({', '.join(closed)})." if closed else f"No active session for: {browser_name}
+        return f"{browser_name} closed ({', '.join(closed)})." if closed else f"No active session for: {browser_name}"
 
     def close_all(self) -> str:
         with self._lock:
@@ -1273,8 +1273,8 @@ TOOL = {
     "scheduling": "WHEN_IDLE",
     "name": "browser_control",
     "description": (
-        "Controls the web browser: open an address, search, click, type, prepare chat messages, send approved messages, 
-        "scroll, read the page, manage tabs, go back and forward. "
+        "Controls the web browser: open an address, search, click, type, prepare chat messages, "
+        "send approved messages, monitor page updates, scroll, read the page, manage tabs, go back and forward. "
         "THIS TOOL OPENS THE BROWSER ITSELF. Never call open_app for the "
         "browser first - doing both launches it twice, the second copy on a "
         "different profile with none of the user's sign-ins. 'Open Chrome and "
