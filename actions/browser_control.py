@@ -1207,7 +1207,7 @@ def _log(player, text: str):
 # ── Tool declaration (auto-discovered by core/action_loader.py) ──────────────
 TOOL = {
     "behavior": "NON_BLOCKING",
-    "scheduling": "SILENT",
+    "scheduling": "WHEN_IDLE",
     "name": "browser_control",
     "description": (
         "Controls the web browser: open an address, search, click, type, "
