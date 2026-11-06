@@ -612,6 +612,9 @@ class JarvisLive:
         self.audio_in_queue       = None
         self.out_queue            = None
         self._loop                     = None
+        self._background_task_lock = threading.RLock()
+        self._background_task_records = {}
+        self._background_task_seq = 0
         self._is_speaking         = False
         self._speaking_lock       = threading.Lock()
         self._phone_active        = False   # True while phone mic is streaming; pauses PC mic
@@ -663,6 +666,7 @@ class JarvisLive:
         self.ui.on_interrupt      = self.interrupt
         self.ui.on_voice_change   = self._on_voice_change     # voice picker → rebuild session
         self.ui.on_audio_device_change = self._on_audio_device_change
+        self.ui.get_background_tasks = self._get_background_tasks
         self._reconnect_event: asyncio.Event | None = None
         self._reconnect_keep = True   # False → next rebuild drops the resumption handle
 
@@ -830,6 +834,79 @@ class JarvisLive:
         # what they are waiting to see.
         return wake_install(logger=lambda m: print(f"[Wake] {m}"),
                             notify=lambda m: self.ui.write_log(f"SYS: {m}"))
+
+    def _get_background_tasks(self, task_id: str = "") -> list[dict]:
+        """Thread-safe snapshot used by the background_tasks action."""
+        with self._background_task_lock:
+            if task_id:
+                record = self._background_task_records.get(task_id)
+                return [dict(record)] if record else []
+            return [
+                dict(record)
+                for record in sorted(
+                    self._background_task_records.values(),
+                    key=lambda item: item["started_at"],
+                    reverse=True,
+                )
+            ]
+
+    async def _run_background_tool(
+        self, task_id: str, name: str, args: dict, source: str
+    ) -> None:
+        """Run an opted-in action/plugin without occupying the live receive loop."""
+        result = ""
+        status = "failed"
+        try:
+            loop = asyncio.get_running_loop()
+            if source == "action":
+                ctx = {
+                    "player": self.ui,
+                    "speak": self.speak,
+                    "response": None,
+                    "session_memory": None,
+                }
+                raw = await loop.run_in_executor(
+                    None,
+                    lambda: self._action_registry.run(name, args, ctx),
+                )
+            else:
+                raw = await loop.run_in_executor(
+                    None,
+                    lambda: self._plugin_registry.run(
+                        name, args, player=self.ui, session_memory=None
+                    ),
+                )
+            result = str(raw or "Done.")
+            status = "completed" if not result.startswith(
+                ("Tool '", "Plugin '", "Action '")
+            ) else "failed"
+
+            if (
+                name == "web_search"
+                and result
+                and not result.startswith(("No results", "Search failed"))
+            ):
+                mode = args.get("mode", "search")
+                query = args.get("query") or ", ".join(args.get("items", []))
+                label = f"{mode.upper()} — {query[:38]}" if query else mode.upper()
+                self.ui.show_content(label, outcome.unwrap(result))
+        except Exception as exc:
+            result = f"{type(exc).__name__}: {exc}"
+            status = "failed"
+            traceback.print_exc()
+
+        with self._background_task_lock:
+            record = self._background_task_records.get(task_id)
+            if record is not None:
+                record["status"] = status
+                record["result"] = result
+                record["finished_at"] = datetime.now().isoformat(timespec="seconds")
+
+        self.ui.write_log(
+            f"SYS: Background task {task_id} ({name}) {status}. "
+            "Ask me for its result when you are ready."
+        )
+        print(f"[JARVIS] Background task {task_id} {status}: {result[:160]}")
 
     def plugin_say(self, instruction: str) -> None:
         """
@@ -1386,6 +1463,73 @@ class JarvisLive:
             return types.FunctionResponse(
                 id=fc.id, name=name,
                 response={"result": "ok", "silent": True}
+            )
+
+        # Opted-in long actions/plugins run independently, so this receive loop
+        # can keep processing microphone input and live conversation.
+        _is_action = self._action_registry.has(name)
+        _is_plugin = self._plugin_registry.has(name)
+        _behavior = (
+            self._action_registry.behavior(name) if _is_action
+            else self._plugin_registry.behavior(name) if _is_plugin
+            else None
+        )
+        if _behavior == "NON_BLOCKING" and (_is_action or _is_plugin):
+            if name == "file_processor" and not args.get("file_path") and self.ui.current_file:
+                args["file_path"] = self.ui.current_file
+            if (
+                name == "dev_agent"
+                and not args.get("folder")
+                and self.ui.current_file
+                and Path(self.ui.current_file).is_dir()
+                and str(args.get("mode") or "").lower() != "status"
+            ):
+                args["folder"] = self.ui.current_file
+                args["mode"] = "improve"
+
+            with self._background_task_lock:
+                self._background_task_seq += 1
+                task_id = f"BG-{self._background_task_seq:04d}"
+                self._background_task_records[task_id] = {
+                    "id": task_id,
+                    "name": name,
+                    "status": "running",
+                    "result": "",
+                    "started_at": datetime.now().isoformat(timespec="seconds"),
+                    "finished_at": "",
+                }
+                if len(self._background_task_records) > 40:
+                    completed = [
+                        key for key, value in self._background_task_records.items()
+                        if value["status"] != "running" and key != task_id
+                    ]
+                    for key in completed[: len(self._background_task_records) - 40]:
+                        self._background_task_records.pop(key, None)
+
+            asyncio.create_task(
+                self._run_background_tool(
+                    task_id, name, dict(args), "action" if _is_action else "plugin"
+                ),
+                name=f"background:{task_id}:{name}",
+            )
+            if not self.ui.muted:
+                self.ui.set_state("LISTENING")
+            print(f"[JARVIS] Background task {task_id} started: {name}")
+            _sched = (
+                self._action_registry.scheduling(name) if _is_action
+                else self._plugin_registry.scheduling(name)
+            ) or "WHEN_IDLE"
+            return types.FunctionResponse(
+                id=fc.id,
+                name=name,
+                response={
+                    "result": (
+                        f"Background task started with ID {task_id}. "
+                        "Continue the conversation normally. Do not claim it is "
+                        "finished; use background_tasks to check its status and result."
+                    )
+                },
+                scheduling=_sched,
             )
 
         loop   = asyncio.get_event_loop()
