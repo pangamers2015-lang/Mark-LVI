@@ -83,6 +83,10 @@ def self_updater(parameters: dict = None, player=None) -> str:
         return "Use action='apply_and_restart' with files containing relative paths and complete new file contents."
     try:
         payload, paths = _stage(params.get("files"))
+        defer_restart = getattr(player, "defer_restart_until_idle", None)
+        if not callable(defer_restart):
+            payload.unlink(missing_ok=True)
+            return "Update was not started: safe background-task-aware restart is unavailable."
         runner = ROOT / "core" / "self_update_runner.py"
         if not runner.is_file():
             payload.unlink(missing_ok=True)
@@ -104,12 +108,10 @@ def self_updater(parameters: dict = None, player=None) -> str:
             creationflags=creationflags,
             start_new_session=(os.name != "nt"),
         )
-        if player is None or not getattr(player, "root", None):
-            payload.unlink(missing_ok=True)
-            return "Update was not started: the application UI is unavailable, so a safe restart cannot be requested."
-        # Quit the Tk event loop on its owning thread. The helper waits for this
-        # process to exit before touching any source file.
-        player.root.after(700, player.root.quit)
+        # Keep the current process alive while its other background tasks finish.
+        # The task-completion hook will close the Qt event loop once the updater
+        # is the only remaining work, so no unrelated task is cut off mid-run.
+        defer_restart()
         return (
             "Update staged and validated. Restart has been scheduled for "
             + ", ".join(paths)
