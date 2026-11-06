@@ -1025,17 +1025,19 @@ class _SessionRegistry:
 
     def __init__(self):
         self._sessions:        dict[str, _BrowserSession] = {}
+        self._background_sessions: dict[str, _BrowserSession] = {}
         self._active_browser:  str                        = ""
         self._lock             = threading.Lock()
         self._last_native_url: str                        = ""
 
-    def has(self, browser_name: str | None = None) -> bool:
+    def has(self, browser_name: str | None = None, background: bool = False) -> bool:
         """Is there an active automation session for this browser (or any)?"""
         with self._lock:
+            sessions = self._background_sessions if background else self._sessions
             if not browser_name:
-                return bool(self._sessions)
+                return bool(sessions)
             name = _ALIASES.get(browser_name.lower().strip(), browser_name.lower().strip())
-            return name in self._sessions
+            return name in sessions
 
     def note_native_url(self, url: str) -> None:
         self._last_native_url = url
@@ -1045,20 +1047,21 @@ class _SessionRegistry:
         url, self._last_native_url = self._last_native_url, ""
         return url
 
-    def _get_or_create(self, browser_name: str) -> _BrowserSession:
+    def _get_or_create(self, browser_name: str, background: bool = False) -> _BrowserSession:
+        sessions = self._background_sessions if background else self._sessions
         with self._lock:
-            if browser_name not in self._sessions:
-                sess = _BrowserSession(browser_name)
+            if browser_name not in sessions:
+                sess = _BrowserSession(browser_name, headless=background)
                 sess.start()
-                self._sessions[browser_name] = sess
-                print(f"[Registry] New session: {browser_name}")
-            return self._sessions[browser_name]
+                sessions[browser_name] = sess
+                print(f"[Registry] New session: {browser_name}" + (" (background)" if background else ""))
+            return sessions[browser_name]
 
-    def get(self, browser_name: str | None = None) -> _BrowserSession:
+    def get(self, browser_name: str | None = None, background: bool = False) -> _BrowserSession:
         if not browser_name:
             browser_name = self._active_browser or _detect_default_browser()
         browser_name = _ALIASES.get(browser_name.lower().strip(), browser_name.lower().strip())
-        sess = self._get_or_create(browser_name)
+        sess = self._get_or_create(browser_name, background=background)
         self._active_browser = browser_name
         return sess
 
@@ -1070,19 +1073,25 @@ class _SessionRegistry:
 
     def close_one(self, browser_name: str) -> str:
         with self._lock:
-            sess = self._sessions.pop(browser_name, None)
-        if sess:
-            sess.close()
-            if self._active_browser == browser_name:
-                self._active_browser = ""
-            return f"{browser_name} closed."
-        return f"No active session for: {browser_name}"
+            visible = self._sessions.pop(browser_name, None)
+            background = self._background_sessions.pop(browser_name, None)
+        closed = []
+        for label, sess in (("visible", visible), ("background", background)):
+            if sess:
+                sess.close()
+                closed.append(label)
+        if self._active_browser == browser_name:
+            self._active_browser = ""
+        return f"{browser_name} closed ({', '.join(closed)})." if closed else f"No active session for: {browser_name}
 
     def close_all(self) -> str:
         with self._lock:
-            names    = list(self._sessions.keys())
-            sessions = list(self._sessions.values())
+            names = list(self._sessions.keys()) + [
+                f"{name} (background)" for name in self._background_sessions
+            ]
+            sessions = list(self._sessions.values()) + list(self._background_sessions.values())
             self._sessions.clear()
+            self._background_sessions.clear()
             self._active_browser = ""
         for s in sessions:
             try:
@@ -1093,12 +1102,14 @@ class _SessionRegistry:
 
     def list_sessions(self) -> str:
         with self._lock:
-            if not self._sessions:
+            if not self._sessions and not self._background_sessions:
                 return "No active browser sessions."
             lines = []
             for name in self._sessions:
                 marker = " ◀ active" if name == self._active_browser else ""
                 lines.append(f"  • {name}{marker}")
+            for name in self._background_sessions:
+                lines.append(f"  • {name} (background)")
             return "Open browsers:\n" + "\n".join(lines)
 
 
@@ -1143,9 +1154,10 @@ def browser_control(
     # user had opened it themselves. A controlled window with about:blank never
     # opens here. The only exception: if an automation flow is already running,
     # navigation continues in that window (so multi-step tasks aren't split).
+    background = bool(params.get("background", False))
     if action in ("go_to", "search", "new_tab"):
-        if _registry.has(browser):
-            sess = _registry.get(browser)
+        if background or _registry.has(browser):
+            sess = _registry.get(browser, background=background)
             try:
                 if action == "search":
                     result = sess.run(sess.search(params.get("query", ""),
@@ -1179,7 +1191,7 @@ def browser_control(
     # only opens here, and as soon as it opens it goes to the user's last
     # navigated page — it doesn't sit on a blank page.
     try:
-        sess = _registry.get(browser)
+        sess = _registry.get(browser, background=background)
     except Exception as e:
         result = f"Could not start browser session: {e}"
         _log(player, result)
@@ -1288,6 +1300,10 @@ TOOL = {
             "browser": {
                 "type": "STRING",
                 "description": "Target browser: chrome | edge | firefox | opera | operagx | brave | vivaldi | safari. Omit to use the currently active browser."
+            },
+            "background": {
+                "type": "BOOLEAN",
+                "description": "Use a headless browser without a visible window. It has a separate persistent Yon profile and may need its own sign-in."
             },
             "url": {
                 "type": "STRING",
