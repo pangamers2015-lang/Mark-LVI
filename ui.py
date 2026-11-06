@@ -5602,7 +5602,7 @@ class MainWindow(QMainWindow):
         ][:8]
         signature = tuple(
             (item.get("id"), item.get("name"), item.get("status"),
-             item.get("stage") or item.get("current_step") or item.get("description"),
+             item.get("stage") or item.get("current_step") or item.get("description") or item.get("summary"),
              item.get("progress"))
             for item in active
         )
@@ -5644,7 +5644,8 @@ class MainWindow(QMainWindow):
             task_id.setStyleSheet(f"color: {C.TEXT_DIM}; background: transparent; border: none;")
             card_layout.addWidget(task_id)
             detail_text = (item.get("stage") or item.get("current_step")
-                           or item.get("description") or "Executando em segundo plano…")
+                           or item.get("description") or item.get("summary")
+                           or "Executando em segundo plano…")
             detail = QLabel(str(detail_text)[:180])
             detail.setWordWrap(True)
             detail.setFont(QFont("Courier New", 6))
