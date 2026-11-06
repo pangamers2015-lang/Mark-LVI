@@ -5680,10 +5680,8 @@ class MainWindow(QMainWindow):
             l.setStyleSheet(f"color: {C.TEXT_MED}; background: transparent;")
             return l
 
-        lay.addWidget(_sec("ACTIVITY LOG"))
         self._tasks_panel = self._build_tasks_panel()
         lay.addWidget(self._tasks_panel)
-
         lay.addWidget(_sec("ACTIVITY LOG"))
         self._log = LogWidget()
         lay.addWidget(self._log, stretch=1)
@@ -7320,12 +7318,17 @@ class MainWindow(QMainWindow):
 
 
 class _RootShim:
-    def __init__(self, app: QApplication):
+    def __init__(self, app: QApplication, context=None):
         self._app = app
+        self._context = context
     def mainloop(self):
         self._app.exec()
     def after(self, milliseconds: int, callback):
-        QTimer.singleShot(max(0, int(milliseconds)), callback)
+        delay = max(0, int(milliseconds))
+        if self._context is not None:
+            QTimer.singleShot(delay, self._context, callback)
+        else:
+            QTimer.singleShot(delay, callback)
     def quit(self):
         self._app.quit()
     def protocol(self, *_):
@@ -7382,7 +7385,7 @@ class JarvisUI:
         self._app = QApplication.instance() or QApplication(sys.argv)
         self._app.setStyle("Fusion")
         self._win = MainWindow(face_path)
-        self.root = _RootShim(self._app)
+        self.root = _RootShim(self._app, self._win)
         self._win.show()
 
     @property
