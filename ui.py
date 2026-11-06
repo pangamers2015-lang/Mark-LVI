@@ -4751,6 +4751,9 @@ class MainWindow(QMainWindow):
         self._quiz_panel.hide()
         self._visual_root = central
         self._build_immersive_overlay(central)
+        self._legacy_panels_visible = False
+        self._legacy_toggle_shortcut = QShortcut(QKeySequence("Ctrl+Shift+L"), self)
+        self._legacy_toggle_shortcut.activated.connect(self._toggle_legacy_panels)
 
         # Quick-access drawer (floating overlay, built after central widget layout is done)
         self._quick_drawer = self._build_quick_drawer()
@@ -5751,6 +5754,15 @@ class MainWindow(QMainWindow):
 
     def resizeEvent(self, event) -> None:
         self._resize_existing_overlays(event)
+        self._position_immersive_overlays()
+
+    def _toggle_legacy_panels(self) -> None:
+        """Temporarily reveal the preserved original control panels."""
+        self._legacy_panels_visible = not self._legacy_panels_visible
+        visible = self._legacy_panels_visible
+        for widget in (self._legacy_header, self._legacy_footer,
+                       self._left_panel, self._right_panel):
+            widget.setVisible(visible)
         self._position_immersive_overlays()
 
     def _build_tasks_panel(self) -> QWidget:
