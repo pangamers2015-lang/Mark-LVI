@@ -645,7 +645,11 @@ class _BrowserSession:
                 self._context = await engine_obj.launch_persistent_context(profile, **kwargs)
             except Exception as e:
                 print(f"[Browser] Firefox real profile failed ({e}), using JARVIS profile")
-                jarvis = str(Path.home() / ".jarvis_profiles" / "firefox_jarvis")
+                jarvis = str(
+                    Path.home() / ".yon_profiles" / "firefox_headless_fallback"
+                    if self.headless else
+                    Path.home() / ".jarvis_profiles" / "firefox_jarvis"
+                )
                 Path(jarvis).mkdir(parents=True, exist_ok=True)
                 self._context = await engine_obj.launch_persistent_context(jarvis, **kwargs)
 
@@ -735,7 +739,11 @@ class _BrowserSession:
         # profile / newer Chrome versions block the real profile under
         # automation). Fall back to a persistent JARVIS automation profile —
         # accounts logged in here once stay logged in on later sessions too.
-        jarvis_profile = str(Path.home() / ".jarvis_profiles" / self.browser_name)
+        jarvis_profile = str(
+            Path.home() / ".yon_profiles" / (self.browser_name + "_headless_fallback")
+            if self.headless else
+            Path.home() / ".jarvis_profiles" / self.browser_name
+        )
         Path(jarvis_profile).mkdir(parents=True, exist_ok=True)
         print(f"[Browser] Retrying with JARVIS profile: {jarvis_profile}")
 
@@ -1273,8 +1281,9 @@ TOOL = {
     "scheduling": "WHEN_IDLE",
     "name": "browser_control",
     "description": (
-        "Controls the web browser: open an address, search, click, type, prepare chat messages, "
-        "send approved messages, monitor page updates, scroll, read the page, manage tabs, go back and forward. "
+        "Controls the web browser: open pages visibly or in headless background mode, "
+        "search, click, type, prepare chat messages, send approved messages, monitor page updates, "
+        "scroll, read the page, manage tabs, go back and forward. "
         "THIS TOOL OPENS THE BROWSER ITSELF. Never call open_app for the "
         "browser first - doing both launches it twice, the second copy on a "
         "different profile with none of the user's sign-ins. 'Open Chrome and "
