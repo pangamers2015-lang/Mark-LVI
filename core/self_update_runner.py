@@ -22,11 +22,20 @@ def process_exists(pid: int) -> bool:
     if os.name == "nt":
         try:
             import ctypes
-            handle = ctypes.windll.kernel32.OpenProcess(0x1000, False, pid)
+            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            kernel32.OpenProcess.argtypes = [ctypes.c_ulong, ctypes.c_int, ctypes.c_ulong]
+            kernel32.OpenProcess.restype = ctypes.c_void_p
+            kernel32.GetExitCodeProcess.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_ulong)]
+            kernel32.GetExitCodeProcess.restype = ctypes.c_int
+            kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+            kernel32.CloseHandle.restype = ctypes.c_int
+            handle = kernel32.OpenProcess(0x1000, False, pid)
             if not handle:
                 return False
-            ctypes.windll.kernel32.CloseHandle(handle)
-            return True
+            code = ctypes.c_ulong()
+            ok = kernel32.GetExitCodeProcess(handle, ctypes.byref(code))
+            kernel32.CloseHandle(handle)
+            return bool(ok and code.value == 259)  # STILL_ACTIVE
         except Exception:
             return False
     try:
