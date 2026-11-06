@@ -76,8 +76,8 @@ def _processes(limit: int) -> str:
 
 def _drives() -> str:
     if platform.system() == "Windows":
-        roots = [f"{letter}:\" for letter in string.ascii_uppercase
-                 if os.path.exists(f"{letter}:\\")]
+        roots = [f"{letter}:" + chr(92) for letter in string.ascii_uppercase
+                 if os.path.exists(f"{letter}:" + chr(92))]
         return "Available drive roots: " + (", ".join(roots) if roots else "none detected")
     try:
         import psutil
