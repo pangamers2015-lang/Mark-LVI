@@ -93,13 +93,11 @@ def main() -> int:
     applied = []
     new_files = []
 
-    # The app defers shutdown until its other background tasks finish. Allow
-    # long-running work to complete instead of abandoning the staged update.
-    deadline = time.monotonic() + 21600
-    while process_exists(args.wait_pid) and time.monotonic() < deadline:
+    # The app defers shutdown until its other background tasks finish. Wait
+    # without a short timeout: abandoning a staged update after six hours could
+    # otherwise leave the app running with a pending restart request.
+    while process_exists(args.wait_pid):
         time.sleep(0.25)
-    if process_exists(args.wait_pid):
-        return 2
 
     try:
         manifest = json.loads(payload.read_text(encoding="utf-8"))
