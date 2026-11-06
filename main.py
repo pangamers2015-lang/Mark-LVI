@@ -1525,6 +1525,7 @@ class JarvisLive:
                 self._background_task_records[task_id] = {
                     "id": task_id,
                     "name": name,
+                    "summary": str(args.get("task") or args.get("prompt") or args.get("description") or args.get("query") or args.get("url") or args.get("file_path") or args.get("folder") or name)[:180],
                     "status": "running",
                     "result": "",
                     "started_at": datetime.now().isoformat(timespec="seconds"),
