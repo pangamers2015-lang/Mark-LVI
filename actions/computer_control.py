@@ -670,6 +670,8 @@ def computer_control(
 
 # ── Tool declaration (auto-discovered by core/action_loader.py) ──────────────
 TOOL = {
+    "behavior": "NON_BLOCKING",
+    "scheduling": "SILENT",
     "name": "computer_control",
     "description": (
         "Direct computer control: type, click, hotkeys, scroll, move mouse, "
