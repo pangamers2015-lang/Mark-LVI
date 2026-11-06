@@ -45,10 +45,52 @@ def _resolve_target(raw_path: str, folder: str = "") -> Path:
 def fast_code_edit(parameters: dict, player=None, speak=None) -> str:
     p = parameters or {}
     started = time.perf_counter()
+    mode = str(p.get("mode") or "replace").strip().lower()
+    folder = str(p.get("folder") or "").strip()
+    root = Path(folder).expanduser().resolve() if folder else _base_dir()
+
+    if mode == "search":
+        query = str(p.get("query") or "").strip()
+        if len(query) < 2:
+            return "Fast search needs at least two characters."
+        if not root.is_dir():
+            return "The selected project folder does not exist."
+        allowed = {".py", ".json", ".txt", ".toml", ".yaml", ".yml",
+                    ".ini", ".js", ".ts", ".html", ".css"}
+        found = []
+        scanned = 0
+        for candidate in root.rglob("*"):
+            if not candidate.is_file() or candidate.suffix.lower() not in allowed:
+                continue
+            try:
+                relative = candidate.relative_to(root)
+                if any(part in _BLOCKED or part.startswith(".") for part in relative.parts):
+                    continue
+                if candidate.stat().st_size > _MAX_BYTES:
+                    continue
+                scanned += 1
+                if scanned > 300:
+                    break
+                lines = candidate.read_text(encoding="utf-8").splitlines()
+                for number, line in enumerate(lines, 1):
+                    if query.casefold() in line.casefold():
+                        found.append(f"{relative}:{number}: {line.strip()[:240]}")
+                        if len(found) >= 30:
+                            break
+                if len(found) >= 30:
+                    break
+            except (OSError, UnicodeError):
+                continue
+        if not found:
+            return f"No matches for '{query}' in {scanned} source files."
+        return "Search results (read-only; choose an exact unique source fragment before editing):\n" + "\n".join(found)
+
+    if mode != "replace":
+        return "Mode must be 'search' or 'replace'."
+
     raw_path = str(p.get("path") or "").strip()
     old = str(p.get("find_text") or "")
     new = str(p.get("replace_text") or "")
-    folder = str(p.get("folder") or "").strip()
 
     if not raw_path or not old:
         return "Fast edit needs a relative file path and the exact existing text."
@@ -129,7 +171,7 @@ TOOL = {
             "replace_text": {"type": "STRING", "description": "Exact replacement source fragment."},
             "folder": {"type": "STRING", "description": "Optional absolute project folder. Defaults to the Yon application folder."}
         },
-        "required": ["path", "find_text", "replace_text"]
+        "required": []
     },
     "tier": "core",
     "brief": "Apply one exact, unique local source replacement with backup and syntax validation.",
