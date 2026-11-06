@@ -150,6 +150,11 @@ class ActionRegistry:
         rec = self._actions.get(name)
         return rec.scheduling if rec else None
 
+    def behavior(self, name: str) -> Optional[str]:
+        """Whether this action may run without holding up the live conversation."""
+        rec = self._actions.get(name)
+        return rec.behavior if rec else None
+
     def names(self) -> set[str]:
         return set(self._actions.keys())
 
