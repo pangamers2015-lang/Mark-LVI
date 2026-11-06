@@ -614,6 +614,7 @@ class JarvisLive:
         self.out_queue            = None
         self._loop                     = None
         self._background_task_lock = threading.RLock()
+        self._restart_when_idle = False
         self._background_task_records = {
             item["id"]: item for item in work_journal.list_tasks()
             if isinstance(item, dict) and item.get("id")
@@ -678,6 +679,7 @@ class JarvisLive:
         self.ui.on_voice_change   = self._on_voice_change     # voice picker → rebuild session
         self.ui.on_audio_device_change = self._on_audio_device_change
         self.ui.get_background_tasks = self._get_background_tasks
+        self.ui.defer_restart_until_idle = self._defer_restart_until_idle
         self._reconnect_event: asyncio.Event | None = None
         self._reconnect_keep = True   # False → next rebuild drops the resumption handle
 
@@ -846,6 +848,23 @@ class JarvisLive:
         return wake_install(logger=lambda m: print(f"[Wake] {m}"),
                             notify=lambda m: self.ui.write_log(f"SYS: {m}"))
 
+    def _defer_restart_until_idle(self) -> None:
+        """Defer a self-update restart until every other background task finishes."""
+        with self._background_task_lock:
+            self._restart_when_idle = True
+        self._maybe_restart_when_idle()
+
+    def _maybe_restart_when_idle(self) -> None:
+        with self._background_task_lock:
+            if not self._restart_when_idle:
+                return
+            if any(item.get("status") == "running"
+                   for item in self._background_task_records.values()):
+                return
+            self._restart_when_idle = False
+        print("[JARVIS] Background work is idle; handing off to the self-updater.")
+        self.ui.root.after(700, self.ui.root.quit)
+
     def _get_background_tasks(self, task_id: str = "") -> list[dict]:
         """Thread-safe snapshot used by the background_tasks action."""
         with self._background_task_lock:
@@ -914,6 +933,7 @@ class JarvisLive:
                 record["finished_at"] = datetime.now().isoformat(timespec="seconds")
                 work_journal.save_task(record)
 
+        self._maybe_restart_when_idle()
         self.ui.write_log(
             f"SYS: Background task {task_id} ({name}) {status}. "
             "Ask me for its result when you are ready."
