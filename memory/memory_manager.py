@@ -1,5 +1,6 @@
 import json
 import re
+import unicodedata
 from datetime import datetime
 from threading import Lock
 from pathlib import Path
@@ -522,3 +523,39 @@ def set_behavior_preferences(preferences: dict) -> dict:
     if updates:
         update_memory({"preferences": updates})
     return get_behavior_preferences()
+
+def infer_behavior_preferences_from_text(text: str) -> dict:
+    """Recognize explicit startup-preference instructions without relying on the LLM."""
+    raw = unicodedata.normalize("NFKD", str(text or "").lower())
+    normalized = "".join(ch for ch in raw if not unicodedata.combining(ch))
+
+    startup_markers = (
+        "ao abrir", "quando abrir", "ao iniciar", "quando iniciar",
+        "na inicializacao", "toda vez que abrir", "sempre que abrir",
+        "quando eu abrir", "ao ligar", "no inicio", "startup",
+    )
+    if not any(marker in normalized for marker in startup_markers):
+        return {}
+
+    negative_markers = (
+        "nao quero", "nao gostaria", "nao precisa", "nao anuncie",
+        "nao fale", "nao diga", "nao mostre", "sem ", "pare de", "evite",
+    )
+    negative = any(marker in normalized for marker in negative_markers)
+    updates = {}
+
+    time_terms = ("hora", "horario", "horas", "que horas")
+    news_terms = ("noticia", "noticias", "manchete", "manchetes", "noticiario", "jornal")
+
+    if negative and any(term in normalized for term in time_terms):
+        updates["announce_time_at_startup"] = False
+    if negative and any(term in normalized for term in news_terms):
+        updates["deliver_news_at_startup"] = False
+
+    greeting_terms = ("saudacao", "cumprimento", "me receba", "me receber")
+    style_terms = ("suave", "tranquila", "tranquilo", "calma", "calmo", "breve", "curta", "curto", "natural")
+    if (any(term in normalized for term in greeting_terms)
+            and any(term in normalized for term in style_terms)):
+        updates["startup_greeting_style"] = "brief, calm and natural"
+
+    return updates
