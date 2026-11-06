@@ -528,7 +528,8 @@ def _open_native(url: str, browser_name: Optional[str]) -> str:
 class _BrowserSession:
     """
     A full session for one browser instance.
-    All browsers open on the real profile via launch_persistent_context.
+    Visible sessions use the established browser-profile policy; headless
+    sessions use isolated persistent Yon profiles.
     """
 
     def __init__(self, browser_name: str, headless: bool = False):
@@ -1156,12 +1157,10 @@ def browser_control(
         _log(player, result)
         return result
 
-    # ── Navigation is ALWAYS native ──────────────────────────────────────────
-    # go_to / search / new_tab open the site in the user's own browser —
-    # their own profile, logged-in accounts and start page; exactly as if the
-    # user had opened it themselves. A controlled window with about:blank never
-    # opens here. The only exception: if an automation flow is already running,
-    # navigation continues in that window (so multi-step tasks aren't split).
+    # ── Navigation defaults to the user's native browser ───────────────────────
+    # A requested headless background session, or an already active automation
+    # session, keeps navigation inside Playwright so the same page can be read
+    # and controlled by subsequent actions.
     background = bool(params.get("background", False))
     if action in ("go_to", "search", "new_tab"):
         if background or _registry.has(browser):
@@ -1312,7 +1311,7 @@ TOOL = {
             },
             "background": {
                 "type": "BOOLEAN",
-                "description": "Use a headless browser without a visible window. It has a separate persistent Yon profile and may need its own sign-in."
+                "description": "Use a headless browser without a visible window. It has a separate persistent Yon profile and may need its own sign-in. Pass background=true on every following browser action to keep using this session."
             },
             "url": {
                 "type": "STRING",
