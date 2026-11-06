@@ -725,7 +725,7 @@ class _BrowserSession:
             try:
                 self._context = await engine_obj.launch_persistent_context(profile, **kwargs)
                 self._page = await self._adopt_page()
-                self.profile_kind = "real"
+                self.profile_kind = "separate" if self.headless else "real"
                 print(f"[Browser] ✅ Launched [{label}] profile={profile}")
                 return
             except Exception as e:
