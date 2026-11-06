@@ -129,8 +129,8 @@ TOOL = {
         "explicitly asks to implement or update this application itself. Supply "
         "action='apply_and_restart' and files as objects with relative 'path' and "
         "complete replacement 'content'. It validates Python syntax, stages the "
-        "change, closes the current app, applies files after process exit, then "
-        "restarts. Existing files are backed up and an early startup failure rolls "
+        "change, waits for other background tasks to finish, then closes the app, "
+        "applies files after process exit and restarts. Existing files are backed up "
         "the update back. Never use for unrelated repositories or arbitrary commands. "
         "Explain which files will change and obtain the user's approval before calling."
     ),
