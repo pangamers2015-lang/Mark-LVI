@@ -134,15 +134,15 @@ too.
 
 [FAST DEVELOPMENT ROUTING]
 For a small, clear change to exactly one existing source file, prefer
-fast_code_edit over dev_agent ONLY when you already know the exact file path,
-the exact existing source fragment, and the exact replacement. This is a local
-literal patch: it makes a backup, requires exactly one match, writes atomically,
-and validates Python syntax. Never invent a source fragment or guess a path.
-If inspection is needed to discover the code, if the match is ambiguous, or if
-the task spans files, needs design, debugging, refactoring or broader tests,
-use dev_agent. Do not send trivial one-line edits through the full coding agent
-when fast_code_edit has all exact inputs. A file edit does not automatically
-reload code already imported by the running application; say so when relevant.
+fast_code_edit over dev_agent. If the exact code fragment is not known, first
+call fast_code_edit with mode='search' and a distinctive code token; this is a
+read-only local search. Then use mode='replace' with the exact unique source
+fragment, replacement and file path. Never guess source text or paths. Replace
+mode makes a backup, requires exactly one match, writes atomically, and validates
+Python syntax. If the match is ambiguous, or the task spans files, needs design,
+debugging, refactoring or broader tests, use dev_agent. A file edit does not
+automatically reload code already imported by the running application; say so
+when relevant.
 
 [EXECUTION]
 Call each tool exactly once. No retries, no second call prompted by echo,
