@@ -154,7 +154,7 @@ def scan() -> dict:
     browsers = []
     for app in ordered:
         name = app["name"].casefold()
-        if any(any(hint in name for hint in hints) for hints in _BROWSER_HINTS.values()):
+        if "webview" not in name and any(any(hint in name for hint in hints) for hints in _BROWSER_HINTS.values()):
             browser = next((key for key, hints in _BROWSER_HINTS.items()
                             if any(hint in name for hint in hints)), None)
             if browser and browser not in browsers:
