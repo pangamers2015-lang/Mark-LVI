@@ -865,6 +865,20 @@ class _BrowserSession:
         except Exception as e:
             return f"Could not get page text: {e}"
 
+    async def wait_for_change(
+        self, timeout_ms: int = 30_000, quiet_ms: int = 900,
+        selector: str = "body", max_chars: int = 8_000,
+    ) -> str:
+        """Wait for new visible page text and return it after streaming settles."""
+        page = await self._get_page()
+        try:
+            return await wait_for_page_change(
+                page, timeout_ms=timeout_ms, quiet_ms=quiet_ms,
+                selector=selector, max_chars=max_chars,
+            )
+        except Exception as e:
+            return f"Could not monitor page changes: {e}"
+
     async def get_url(self) -> str:
         page = await self._get_page()
         return page.url
@@ -1172,6 +1186,13 @@ def browser_control(
             result = sess.run(sess.smart_type(params.get("description", ""), params.get("text", "")))
         elif action == "get_text":
             result = sess.run(sess.get_text())
+        elif action == "wait_for_change":
+            result = sess.run(sess.wait_for_change(
+                timeout_ms=int(params.get("timeout_ms", 30_000)),
+                quiet_ms=int(params.get("quiet_ms", 900)),
+                selector=params.get("selector", "body"),
+                max_chars=int(params.get("max_chars", 8_000)),
+            ), timeout=65)
         elif action == "get_url":
             result = sess.run(sess.get_url())
         elif action == "press":
