@@ -6,7 +6,7 @@ import re
 
 
 _CHAT_HINT = re.compile(r"(message|mensagem|chat|prompt|ask|pergunt|send|enviar)", re.I)
-_SEND_HINT = re.compile(r"^(send|enviar|submit|mandar|enviar mensagem)(\\b|$)", re.I)
+_SEND_HINT = re.compile(r"^(send|enviar|submit|mandar|enviar mensagem)(\b|$)", re.I)
 
 
 async def interact_with_chat(
