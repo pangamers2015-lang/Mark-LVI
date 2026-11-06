@@ -65,6 +65,7 @@ from memory.memory_manager import (
 # (screen_process, close_camera, save_memory, manage_monitor, shutdown_jarvis,
 # system_status).
 from core import outcome
+from core import work_journal
 from core.action_loader import strip_meta
 from actions.screen_processor  import _capture_camera, _capture_screen
 from actions.system_monitor    import SystemMonitor, get_system_status
@@ -613,8 +614,18 @@ class JarvisLive:
         self.out_queue            = None
         self._loop                     = None
         self._background_task_lock = threading.RLock()
-        self._background_task_records = {}
-        self._background_task_seq = 0
+        self._background_task_records = {
+            item["id"]: item for item in work_journal.list_tasks()
+            if isinstance(item, dict) and item.get("id")
+        }
+        self._background_task_seq = max(
+            (int(str(key).split("-")[-1]) for key in self._background_task_records
+             if str(key).startswith("BG-") and str(key).split("-")[-1].isdigit()),
+            default=0,
+        )
+        _recovered_work = work_journal.recover_interrupted()
+        for _item in _recovered_work:
+            self._background_task_records[_item["id"]] = _item
         self._is_speaking         = False
         self._speaking_lock       = threading.Lock()
         self._phone_active        = False   # True while phone mic is streaming; pauses PC mic
@@ -901,6 +912,7 @@ class JarvisLive:
                 record["status"] = status
                 record["result"] = result
                 record["finished_at"] = datetime.now().isoformat(timespec="seconds")
+                work_journal.save_task(record)
 
         self.ui.write_log(
             f"SYS: Background task {task_id} ({name}) {status}. "
@@ -1498,6 +1510,7 @@ class JarvisLive:
                     "started_at": datetime.now().isoformat(timespec="seconds"),
                     "finished_at": "",
                 }
+                work_journal.save_task(self._background_task_records[task_id])
                 if len(self._background_task_records) > 40:
                     completed = [
                         key for key, value in self._background_task_records.items()
