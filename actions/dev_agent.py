@@ -1618,7 +1618,7 @@ def dev_agent(
 # ── Tool declaration (auto-discovered by core/action_loader.py) ──────────────
 TOOL = {
     "behavior": "NON_BLOCKING",
-    "scheduling": "SILENT",
+    "scheduling": "WHEN_IDLE",
     "name": "dev_agent",
     "description": (
         "The coding agent, running on the user's chosen coding model. "
