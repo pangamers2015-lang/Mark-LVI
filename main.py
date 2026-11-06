@@ -53,7 +53,8 @@ from ui import JarvisUI
 from memory.memory_manager import (
     load_memory, update_memory, format_memory_for_prompt,
     save_session_summary, pop_last_session,
-    search_memory, set_trim_notifier,
+    search_memory, set_trim_notifier, get_behavior_preferences,
+    set_behavior_preferences as persist_behavior_preferences,
 )
 
 # The file-backed tools (open_app, web_search, browser_control, …) are no longer
@@ -476,6 +477,35 @@ TOOL_DECLARATIONS = [
                 "value": {"type": "STRING", "description": "Concise value in English (e.g. Fatih, pizza, older sister)"},
             },
             "required": ["category", "key", "value"]
+        }
+    },
+    {
+        "name": "set_behavior_preferences",
+        "description": (
+            "Persist a standing preference about how the assistant should behave in future sessions. "
+            "Use this when the user asks for an ongoing behavior change, not for a one-time request. "
+            "For example, set announce_time_at_startup=false when they do not want the time announced, "
+            "or deliver_news_at_startup=false when they do not want startup news. "
+            "Set startup_greeting_style when they describe their preferred greeting. "
+            "Do not claim the preference was learned unless this tool succeeds."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "announce_time_at_startup": {
+                    "type": "BOOLEAN",
+                    "description": "Whether to announce the current time during startup greeting."
+                },
+                "deliver_news_at_startup": {
+                    "type": "BOOLEAN",
+                    "description": "Whether to fetch and speak news during startup."
+                },
+                "startup_greeting_style": {
+                    "type": "STRING",
+                    "description": "A concise persistent style preference for the startup greeting, such as 'brief, calm, warm and natural'."
+                },
+            },
+            "required": [],
         }
     },
     {
@@ -1324,6 +1354,25 @@ class JarvisLive:
         self.ui.set_state("THINKING")
 
 
+        if name == "set_behavior_preferences":
+            requested = {
+                key: args[key]
+                for key in (
+                    "announce_time_at_startup",
+                    "deliver_news_at_startup",
+                    "startup_greeting_style",
+                )
+                if key in args
+            }
+            saved = persist_behavior_preferences(requested)
+            print(f"[Memory] ⚙️ Saved behavior preferences: {list(requested.keys())}")
+            if not self.ui.muted:
+                self.ui.set_state("LISTENING")
+            return types.FunctionResponse(
+                id=fc.id, name=name,
+                response={"result": "saved", "preferences": saved, "silent": True}
+            )
+
         if name == "save_memory":
             category = args.get("category", "notes")
             key      = args.get("key", "")
@@ -1956,61 +2005,71 @@ class JarvisLive:
     # ── Morning briefing ────────────────────────────────────────────────────────
 
     async def _send_startup_briefing(self) -> None:
-        """
-        Two-phase briefing optimized for speed:
-          Phase 1 — instant greeting (no tools) → speech starts in <1s
-          Phase 2 — news pre-fetched in a background thread while Phase 1 plays,
-                    delivered as ready text (no Gemini tool-call round-trip) and
-                    shown on the UI content panel. Waits for turn_complete event
-                    instead of a fixed sleep so there is no unnecessary gap.
-        """
-        memory   = load_memory()
+        """Deliver the startup greeting using saved behavioral preferences."""
+        memory = load_memory()
         identity = memory.get("identity", {})
+        behavior = get_behavior_preferences()
 
         def _val(k: str) -> str:
-            e = identity.get(k, {})
-            return (e.get("value", "") if isinstance(e, dict) else str(e)).strip()
+            entry = identity.get(k, {})
+            return (entry.get("value", "") if isinstance(entry, dict) else str(entry)).strip()
 
         lang = _val("language")
         name = _val("name")
-        time_str = datetime.now().strftime("%H:%M")
+        announce_time = behavior["announce_time_at_startup"]
+        deliver_news = behavior["deliver_news_at_startup"]
+        greeting_style = behavior.get("startup_greeting_style", "").strip()
+        time_str = datetime.now().strftime("%H:%M") if announce_time else ""
 
-        # Start fetching news immediately — runs in parallel while phase 1 plays
+        # Do not even start a news request when the user has disabled startup news.
         loop = asyncio.get_event_loop()
-        news_future = loop.run_in_executor(None, _fetch_news_sync, "top world news today")
+        news_future = (
+            loop.run_in_executor(None, _fetch_news_sync, "top world news today")
+            if deliver_news else None
+        )
 
         await asyncio.sleep(0.3)
         if not self.session:
             return
 
-        # ── Phase 1: instant greeting ─────────────────────────────────────────
-        # The briefing fires before the user has said anything, so the
-        # remembered language is the only signal there is. It is a starting
-        # point, not a setting: the moment they reply, their language wins.
-        lang_clause = (f" Speak this greeting in {lang}, then follow the "
-                       f"user's own language from their first reply onward."
-                       if lang else "")
+        # The greeting happens before the user speaks, so use remembered language
+        # only as an initial hint. The user's next message determines language.
+        lang_clause = (
+            f" Speak this greeting in {lang}, then follow the user's own language "
+            f"from their first reply onward."
+            if lang else ""
+        )
         name_clause = f" Address the user as {name}." if name else ""
 
-        # Inject last session context if available — pop removes it so it's never repeated
+        # Include previous-session context only when it exists.
         last = await asyncio.to_thread(pop_last_session)
         session_clause = ""
         if last:
             try:
-                _delta = (datetime.now() - datetime.strptime(last["date"], "%Y-%m-%d")).days
-                _when  = "earlier today" if _delta == 0 else ("yesterday" if _delta == 1 else f"{_delta} days ago")
+                delta = (datetime.now() - datetime.strptime(last["date"], "%Y-%m-%d")).days
+                when = "earlier today" if delta == 0 else (
+                    "yesterday" if delta == 1 else f"{delta} days ago"
+                )
             except Exception:
-                _when = "last time"
-            session_clause = (
-                f" Also briefly and naturally mention that {_when}: {last['summary']}"
-            )
+                when = "last time"
+            session_clause = f" You may briefly and naturally mention that {when}: {last['summary']}"
 
-        p1 = (
-            f"Greet the user warmly, mention it is {time_str}, and say you are fetching today's news now.{session_clause} "
-            f"Keep it to 2 short sentences max. Do not call any tools.{lang_clause}{name_clause}"
-        )
+        instructions = ["Greet the user warmly and naturally."]
+        if announce_time:
+            instructions.append(f"Mention that the current time is {time_str}.")
+        else:
+            instructions.append("Do not mention or announce the current time.")
+        if deliver_news:
+            instructions.append("Say that you are fetching today's news.")
+        else:
+            instructions.append("Do not mention news, headlines, or fetching news.")
+        if greeting_style:
+            instructions.append(f"Use this preferred greeting style: {greeting_style}.")
+        else:
+            instructions.append("Keep the greeting brief, calm, and conversational.")
+        instructions.append("Keep it to 1 or 2 short sentences. Do not call tools.")
+        p1 = " ".join(instructions) + session_clause + lang_clause + name_clause
 
-        # Clear the turn-done event so we can wait for Phase 1 to finish
         if self._turn_done_event:
             self._turn_done_event.clear()
 
@@ -2018,18 +2077,21 @@ class JarvisLive:
             turns={"role": "user", "parts": [{"text": p1}]},
             turn_complete=True,
         )
-        print("[JARVIS] Briefing phase 1 (greeting) sent.")
+        print("[JARVIS] Startup greeting sent using saved behavior preferences.")
 
-        # ── Phase 2: fire as soon as Phase 1 audio is done ───────────────────
+        # The greeting remains, but the news phase is skipped when disabled.
+        if not deliver_news or news_future is None:
+            return
+
         async def _deliver_news():
             try:
-                lang_str = (f" Speak in {lang} unless the user has since "
-                            f"spoken another language, in which case use theirs."
-                            if lang else "")
+                lang_str = (
+                    f" Speak in {lang} unless the user has since spoken another language, "
+                    f"in which case use theirs."
+                    if lang else ""
+                )
 
-                # Wait for news fetch (already running) and Phase 1 turn-complete
-                # in parallel — whichever takes longer determines the wait time
-                news_done   = asyncio.wrap_future(news_future)
+                news_done = asyncio.wrap_future(news_future)
                 turn_waited = False
                 if self._turn_done_event:
                     try:
@@ -2038,14 +2100,8 @@ class JarvisLive:
                     except asyncio.TimeoutError:
                         pass
 
-                # Extra buffer: turn_complete fires when Gemini finishes *generating*
-                # Phase 1, but audio may still be playing.  Waiting a beat here
-                # prevents Phase 2 audio from arriving while Phase 1 is mid-sentence
-                # (which sounds like a "repeated first response" to the user).
-                if turn_waited:
-                    await asyncio.sleep(0.8)
-                else:
-                    await asyncio.sleep(1.0)
+                # Let greeting audio finish before news audio begins.
+                await asyncio.sleep(0.8 if turn_waited else 1.0)
 
                 try:
                     news_text = await asyncio.wait_for(news_done, timeout=8.0)
@@ -2060,9 +2116,7 @@ class JarvisLive:
                     ("No news found", "Search failed", "Please provide")
                 )
                 if not failed:
-                    # Show on UI content panel immediately
                     self.ui.show_content("NEWS — top world news today", news_text)
-
                     p2 = (
                         f"[BRIEFING] Here are today's top news headlines:\n{news_text}\n\n"
                         "Pick ONE headline, summarise it in one sentence, then say the full list "
@@ -2081,10 +2135,9 @@ class JarvisLive:
                     turns={"role": "user", "parts": [{"text": p2}]},
                     turn_complete=True,
                 )
-                print("[JARVIS] Briefing phase 2 (news) sent.")
+                print("[JARVIS] Startup news phase sent.")
             except Exception as e:
-                print(f"[Briefing] Phase 2 error: {e}")
-                print(f"[JARVIS] Briefing phase 2 failed: {e}")
+                print(f"[Briefing] News phase error: {e}")
                 self.ui.write_log("SYS: Could not fetch the news for the briefing.")
 
         asyncio.create_task(_deliver_news())
