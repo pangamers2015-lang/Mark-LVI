@@ -477,7 +477,6 @@ def pop_last_session() -> dict | None:
         except Exception as e:
             print(f"[Memory] ⚠️ pop_last_session error: {e}")
             return None
-
 # ── Persistent behavior preferences ─────────────────────────────────────────
 
 _BEHAVIOR_BOOLEAN_DEFAULTS = {
@@ -523,4 +522,3 @@ def set_behavior_preferences(preferences: dict) -> dict:
     if updates:
         update_memory({"preferences": updates})
     return get_behavior_preferences()
-
