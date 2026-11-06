@@ -113,6 +113,11 @@ class PluginRegistry:
         rec = self._plugins.get(name)
         return rec.scheduling if rec else None
 
+    def behavior(self, name: str) -> Optional[str]:
+        """Whether this plugin may run without holding up the live conversation."""
+        rec = self._plugins.get(name)
+        return rec.behavior if rec else None
+
     # -- called by main.py from _execute_tool's else branch --
     def run(self, name: str, parameters: dict, player=None, session_memory=None) -> str:
         rec = self._plugins.get(name)
