@@ -5778,6 +5778,11 @@ class MainWindow(QMainWindow):
         self._context_body.setMinimumHeight(130)
         popup_layout.addWidget(self._context_body)
         self._context_popup.hide()
+        self._context_popup_slot = None
+        self._context_popup_needs_slot = True
+        self._context_popup_timer = QTimer(self)
+        self._context_popup_timer.setSingleShot(True)
+        self._context_popup_timer.timeout.connect(self._context_popup.hide)
 
         self._task_overlay_host = QWidget(parent)
         self._task_overlay_host.setStyleSheet("background:transparent;")
@@ -5822,8 +5827,8 @@ class MainWindow(QMainWindow):
         if self._context_popup.isVisible():
             cw = min(430, max(300, int(w*0.34)))
             ch = min(330, max(205, int(h*0.43)))
-            # Candidate anchors around the screen. Avoid the top status capsule
-            # and the task stack; randomise with a small anti-repeat preference.
+            # Pick a slot only when a popup is first shown. Keep that same slot
+            # during refreshes and resizes so a visible card never jumps around.
             margin = 24
             candidates = [
                 (margin, 104), (w-cw-margin, 104),
@@ -5833,20 +5838,21 @@ class MainWindow(QMainWindow):
                 (max(margin, (w-cw)//2), 98),
                 (max(margin, (w-cw)//2), h-ch-margin),
             ]
-            safe = [(x, y) for x, y in candidates
-                    if x >= 0 and y >= 82 and x+cw <= w-margin
-                    and y+ch <= h-margin]
-            if not safe:
-                safe = [(max(margin, w-cw-margin),
-                         max(92, min(h-ch-margin, (h-ch)//2)))]
-            previous = getattr(self, "_context_popup_slot", None)
-            choices = [pt for pt in safe if pt != previous] or safe
-            slot = random.choice(choices)
-            self._context_popup_slot = slot
-            target = QRect(*slot, cw, ch)
-            if self._context_popup.geometry().isNull():
-                self._context_popup.setGeometry(target)
-            else:
+            safe_indices = [
+                i for i, (x, y) in enumerate(candidates)
+                if x >= 0 and y >= 82 and x+cw <= w-margin
+                and y+ch <= h-margin
+            ]
+            if not safe_indices:
+                safe_indices = [3]
+            slot_index = self._context_popup_slot
+            if (self._context_popup_needs_slot or slot_index not in safe_indices):
+                slot_index = random.choice(safe_indices)
+                self._context_popup_slot = slot_index
+                self._context_popup_needs_slot = False
+            x, y = candidates[slot_index]
+            target = QRect(x, y, cw, ch)
+            if self._context_popup.geometry() != target:
                 self._context_popup.setGeometry(target)
             self._context_popup.raise_()
 
@@ -6362,14 +6368,21 @@ class MainWindow(QMainWindow):
         return w
 
     def _show_content(self, title: str, text: str):
-        """Show a contextual, minimal floating card over the orb."""
+        """Show a stable contextual card, then dismiss it after a readable interval."""
         self.hud.glance(0.0, -0.85, hold=1.3)
+        was_visible = self._context_popup.isVisible()
+        content = str(text or "")[:12000]
         self._context_title.setText(str(title or "Informação")[:64])
         self._context_icon.setText(self._context_glyph(title))
-        self._context_body.setPlainText(str(text or "")[:12000])
+        self._context_body.setPlainText(content)
+        if not was_visible:
+            self._context_popup_needs_slot = True
         self._context_popup.show()
         self._context_popup.raise_()
         self._position_immersive_overlays()
+        # Give longer information more reading time, with sensible lower/upper bounds.
+        duration_ms = max(6000, min(20000, 6000 + (len(content) // 45) * 1000))
+        self._context_popup_timer.start(duration_ms)
 
     # ── the coding agent, live ───────────────────────────────────────────────
     # The panel under the head shows a folder job while it runs: what was asked,
