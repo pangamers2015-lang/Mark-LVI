@@ -768,6 +768,7 @@ class JarvisLive:
         # conversation that never ends never produces a summary, and the
         # "yesterday we talked about…" line silently disappears.
         self._resume_handle: str | None = None
+        self._session_connected_at = 0.0
         self._turn_done_event: asyncio.Event | None = None
         self._dashboard     = None
         self._briefing_sent    = False          # morning briefing fires once per process
@@ -2803,9 +2804,13 @@ class JarvisLive:
                 continue
             # Do not inject a background instruction into an active response.
             # A completed turn plus a short quiet window is the safe hand-off point.
-            if not self._last_turn_complete_at:
-                continue
-            if time.monotonic() - self._last_turn_complete_at < 1.5:
+            now = time.monotonic()
+            if self._last_turn_complete_at:
+                if now - self._last_turn_complete_at < 1.5:
+                    continue
+            elif now - self._session_connected_at < 12.0:
+                # Allow the initial greeting to start/finish; if no greeting is
+                # configured, a quiet fresh session can still receive its TXT.
                 continue
             if self._tail_active():
                 continue
@@ -3264,6 +3269,7 @@ class JarvisLive:
                     session.send_client_content = _send_and_arm
 
                     self.session          = session
+                    self._session_connected_at = time.monotonic()
                     self.audio_in_queue   = asyncio.Queue()
                     self.out_queue        = asyncio.Queue(maxsize=200)
                     self._turn_done_event = asyncio.Event()
