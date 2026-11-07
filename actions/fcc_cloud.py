@@ -69,6 +69,10 @@ def fcc_cloud(parameters: dict = None, player=None) -> str:
 
     command = [
         executable,
+        "--permission-mode",
+        "auto",
+        "--allowedTools",
+        "WebSearch,WebFetch",
         "--print",
         "--output-format",
         "json",
@@ -124,24 +128,25 @@ def fcc_cloud(parameters: dict = None, player=None) -> str:
     cost = payload.get("total_cost_usd")
     if cost is not None:
         details.append(f"Reported API cost: US$ {cost}")
-    details.append("Result:\n" + result[:16000])
-    return "\n".join(details)
+    details.append("Result:\\n" + result[:16000])
+    return "\\n".join(details)
 
 
 TOOL = {
     "name": "fcc_cloud",
     "description": (
-        "Delegate a concrete programming, code investigation, or project-file task to "
-        "the user's installed FCC Cloud agent. Runs fcc-claude non-interactively with "
-        "structured JSON output, without opening a terminal window. Use this when the "
-        "user explicitly asks to use Cloud/FCC or when the coordinator decides the task "
-        "needs the coding agent. The default working directory is the Yon project root. "
+        "Delegate a concrete programming, code investigation, web research, or project-file task "
+        "to the user's installed FCC Cloud agent. Runs fcc-claude non-interactively with "
+        "structured JSON output, in automatic permission mode with WebSearch and WebFetch "
+        "pre-approved so routine web research does not stop for permission prompts. Other "
+        "operations are evaluated by Claude Code's automatic safety checks. Does not use "
+        "unrestricted permission bypass. The default working directory is the Yon project root. "
         "The action runs in the background; use background_tasks to check completion "
         "and retrieve the final result. Do not claim completion until that task reports "
         "completed, and inspect or test resulting changes before relying on them. Never "
         "request or expose API keys or authentication tokens."
     ),
-    "brief": "Delegate a programming or project task to FCC Cloud in the background.",
+    "brief": "Delegate a programming, investigation, or web research task to FCC Cloud.",
     "tier": "core",
     "behavior": "NON_BLOCKING",
     "scheduling": "WHEN_IDLE",
