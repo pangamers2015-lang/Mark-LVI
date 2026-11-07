@@ -72,10 +72,9 @@ class LiveVoice:
         if self._loop and self._loop.is_running() and self._stop_event is not None:
             self._loop.call_soon_threadsafe(self._stop_event.set)
         self._stop_audio()
-        self._close_audio()
         thread = self._thread
         if thread and thread.is_alive() and thread is not threading.current_thread():
-            thread.join(timeout=4.0)
+            thread.join(timeout=5.0)
 
     def hold_to_talk(self, held: bool):
         held = bool(held)
