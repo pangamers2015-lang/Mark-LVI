@@ -265,7 +265,7 @@ def run_cognitive_cycle(request):
           else ["Check relevant memory","Answer or act","Verify factual claims"])
         return s
     def review_node(s):
-        s["review"]="No outcome has been verified yet; this is a plan, not completion."
+        s["review"]="No outcome has not been verified yet; this is a plan, not completion."
         try:
             from core.cognitive_agents import specialist_assignments
             s["specialists"]=specialist_assignments(s["request"])
