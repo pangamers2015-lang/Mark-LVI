@@ -155,6 +155,9 @@ class _Handler(BaseHTTPRequestHandler):
         if path == "/api/fechar":
             self.ui.schedule_browser_shutdown()
             return self._send(202, '{"ok":true}')
+        if path == "/api/encerrar":
+            self.ui.request_shutdown()
+            return self._send(202, '{"ok":true,"message":"Encerramento solicitado."}')
         if path == "/api/texto":
             text = str(data.get("texto", "")).strip()
             if text and self.ui.on_text_command:
