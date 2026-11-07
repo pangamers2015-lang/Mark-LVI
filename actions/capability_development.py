@@ -104,6 +104,7 @@ def _format_proposal(row) -> str:
         f"Proposal #{item['id']} — {item['title']}\n"
         f"Topic: {item['topic']}\nStatus: {item['status']}\n"
         f"Limitation: {item['limitation']}\n"
+        f"Proposed approach: {item['approach'] or 'Not supplied'}\n"
         f"Cloud findings: {item['cloud_findings'] or 'Not supplied'}\n"
         f"Implementation plan: {item['implementation_plan'] or 'Not supplied'}\n"
         f"Risks: {item['risks'] or 'Not supplied'}\n"
@@ -177,7 +178,7 @@ def capability_development(parameters: dict, player=None) -> str:
                     (title, topic, topic_key, limitation,
                      _clean(p.get("cloud_findings")),  _clean(p.get("implementation_plan")),
                      _clean(p.get("risks")), _clean(p.get("dependencies"), 2000),
-                     _clean(p.get("test_plan")), now, now),
+                     _clean(p.get("test_plan")), now, now, approach),
                 )
                 proposal_id = int(cur.lastrowid)
                 conn.commit()
