@@ -180,7 +180,7 @@ class Handler(BaseHTTPRequestHandler):
                         if _voice:
                             _voice.stop()
                         threading.Thread(target=_server.shutdown, daemon=True).start()
-                threading.Timer(2.5, shutdown_if_unused).start()
+                threading.Timer(16.5, shutdown_if_unused).start()
                 self.send_json(200, {"ok": True})
                 return
             data = self.read_json()
