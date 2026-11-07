@@ -31,6 +31,16 @@ def _db():
       memory_id INTEGER PRIMARY KEY, model TEXT NOT NULL, vector BLOB NOT NULL,
       dimensions INTEGER NOT NULL, updated_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS cognitive_meta(key TEXT PRIMARY KEY,value TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS goal_dependencies(
+      goal_id INTEGER NOT NULL,
+      depends_on_goal_id INTEGER NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY(goal_id, depends_on_goal_id),
+      FOREIGN KEY(goal_id) REFERENCES goals(id) ON DELETE CASCADE,
+      FOREIGN KEY(depends_on_goal_id) REFERENCES goals(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_goal_dependencies_target
+      ON goal_dependencies(depends_on_goal_id);
     CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
       content,evidence,source,content='memories',content_rowid='id');
     CREATE TRIGGER IF NOT EXISTS memories_ai AFTER INSERT ON memories BEGIN
@@ -237,7 +247,8 @@ def assess_request(request):
     research=any(x in lower for x in ("atual","hoje","agora","último","ultimo",
       "preço","preco","pesquise","fonte","recent","latest","current"))
     multi=len(text.split())>18 or any(x in lower for x in
-      ("implemente","desenvolva","projeto","planeje","construa"))
+      ("implemente","desenvolva","projeto","planeje","construa",
+       "implement","develop","multi-step","multi step","build a","plan a"))
     return {"objective":text[:1200],"needs_research":research,"multi_step":multi,
       "must_retrieve_memory":True,"must_verify_result":True,"unknowns":[],
       "decision":"research" if research else ("plan" if multi else "respond_or_act")}
