@@ -3,12 +3,15 @@ from __future__ import annotations
 import asyncio
 import queue
 import threading
+import time
 from typing import Callable
 
 import numpy as np
 import sounddevice as sd
 from google import genai
 from google.genai import types
+from echo_guard import EchoGuard
+from barge_in import BargeInDetector
 
 LIVE_MODEL = "models/gemini-3.1-flash-live-preview"
 INPUT_RATE = 16_000
@@ -34,6 +37,9 @@ class LiveVoice:
         self._pending = bytearray()
         self._barge_blocks = 0
         self._barge_audio = []
+        self._echo = EchoGuard()
+        self._barge = BargeInDetector()
+        self._interrupted = False
         self._mic_stream = None
         self._speaker_stream = None
 
@@ -54,12 +60,15 @@ class LiveVoice:
 
     def stop(self):
         self._stop.set()
-        if self._loop and self._loop.is_running():
+        if self._loop and self._loop.is_running() and self._stop_event is not None:
             self._loop.call_soon_threadsafe(self._stop_event.set)
         self._stop_audio()
 
     def interrupt(self):
+        self._interrupted = True
         self._stop_audio()
+        self._echo.reset()
+        self._barge.reset()
         self.emit({"type": "voice_state", "state": "listening"})
 
     def send_text_now(self, text: str):
@@ -75,15 +84,19 @@ class LiveVoice:
             )
 
     def _thread_main(self):
-        try:
-            asyncio.run(self._run())
-        except Exception as exc:
-            self.emit({"type": "voice_error", "text": str(exc)[:600]})
-        finally:
-            self._connected.clear()
-            self._session = None
-            self._loop = None
-            self.emit({"type": "voice_state", "state": "stopped"})
+        while not self._stop.is_set():
+            try:
+                asyncio.run(self._run())
+            except Exception as exc:
+                if not self._stop.is_set():
+                    self.emit({"type": "voice_error", "text": str(exc)[:600]})
+                    self.emit({"type": "voice_state", "state": "reconnecting"})
+                    time.sleep(3)
+            finally:
+                self._connected.clear()
+                self._session = None
+                self._loop = None
+        self.emit({"type": "voice_state", "state": "stopped"})
 
     async def _run(self):
         self._loop = asyncio.get_running_loop()
@@ -131,23 +144,15 @@ class LiveVoice:
         def mic_callback(indata, frames, timing, status):
             pcm = bytes(indata)
             if self._speaking.is_set():
-                # Sustained voice energy triggers barge-in; short noise is ignored.
                 samples = np.frombuffer(pcm, dtype="<i2").astype(np.float32)
-                rms = float(np.sqrt(np.mean(samples * samples))) if samples.size else 0.0
-                if rms > 1050:
-                    self._barge_blocks += 1
-                    self._barge_audio.append(pcm)
-                    if len(self._barge_audio) > 8:
-                        self._barge_audio.pop(0)
-                    if self._barge_blocks >= 4 and self._loop:
-                        captured = list(self._barge_audio)
-                        self._barge_blocks = 0
-                        self._barge_audio = []
-                        self._loop.call_soon_threadsafe(self._barge_in, captured)
-                else:
-                    self._barge_blocks = 0
-                    self._barge_audio = []
+                level = float(np.sqrt(np.mean(samples * samples))) / 32768.0 if samples.size else 0.0
+                is_user = self._echo.is_user_speech(pcm, INPUT_RATE, level)
+                confirmed = bool(self._echo.ready_for_barge_in and is_user)
+                captured = self._barge.observe(pcm, confirmed, self._echo.required_blocks)
+                if captured and self._loop:
+                    self._loop.call_soon_threadsafe(self._barge_in, captured)
                 return
+            self._barge.reset()
             if self._loop and self._mic_queue is not None:
                 self._loop.call_soon_threadsafe(self._queue_mic, pcm)
 
@@ -224,12 +229,16 @@ class LiveVoice:
         async for response in session.receive():
             if self._stop.is_set():
                 return
-            if response.data:
+            if response.data and not self._interrupted:
                 self._speaking.set()
                 self.emit({"type": "voice_state", "state": "speaking"})
                 for offset in range(0, len(response.data), 2400):
+                    chunk = response.data[offset:offset + 2400]
+                    samples = np.frombuffer(chunk, dtype="<i2").astype(np.float32)
+                    level = float(np.sqrt(np.mean(samples * samples))) / 32768.0 if samples.size else 0.0
+                    self._echo.note_output(chunk, OUTPUT_RATE, level)
                     try:
-                        self._output.put_nowait(response.data[offset:offset + 2400])
+                        self._output.put_nowait(chunk)
                     except queue.Full:
                         break
             content = response.server_content
@@ -240,5 +249,10 @@ class LiveVoice:
                     self.emit({"type": "transcript", "speaker": "user", "text": inp.text})
                 if out and out.text:
                     self.emit({"type": "transcript", "speaker": "yon", "text": out.text})
-                if content.turn_complete and not self._speaking.is_set():
-                    self.emit({"type": "turn_complete"})
+                if content.turn_complete:
+                    if self._interrupted:
+                        self._interrupted = False
+                        self._echo.reset()
+                        self._barge.reset()
+                    if not self._speaking.is_set():
+                        self.emit({"type": "turn_complete"})
