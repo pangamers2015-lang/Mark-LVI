@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import unittest
+from typing import Never
+
+from agent_framework import Executor, WorkflowBuilder, WorkflowContext, handler
 
 from ion.brain import extract_json
 from ion.models import ProjectPlan
@@ -41,14 +44,12 @@ class IonPlanningTests(unittest.TestCase):
 
 class MicrosoftAgentFrameworkTests(unittest.IsolatedAsyncioTestCase):
     async def test_local_supervisor_workflow_executes(self):
-        from agent_framework import Executor, WorkflowBuilder, WorkflowContext, handler
-
         class EchoExecutor(Executor):
             def __init__(self):
                 super().__init__(id="ion-maf-smoke-test")
 
             @handler
-            async def run(self, value: str, ctx: WorkflowContext[str, str]) -> None:
+            async def run(self, value: str, ctx: WorkflowContext[Never, str]) -> None:
                 await ctx.yield_output(value.upper())
 
         workflow = WorkflowBuilder(start_executor=EchoExecutor(), name="IonSmokeTest").build()
