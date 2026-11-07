@@ -1,0 +1,13 @@
+TESTE DE APRENDIZADO E COMUNICAÇÃO DO YON
+
+Este arquivo contém um conhecimento de teste que deve ser interpretado, aprendido e salvo na memória cognitiva persistente do Yon.
+
+Conhecimento:
+O ChatGPT está integrado às conversas de trabalho com o Yon e vem ajudando no desenvolvimento do projeto desde o começo. Para esta brincadeira, o usuário chama o ChatGPT de amigo oculto do Yon.
+
+Este conhecimento é importante para o teste e o usuário quer ser informado quando Yon terminar de aprendê-lo. Depois de interpretar e salvar o conhecimento, avise por voz, em português, com uma mensagem natural equivalente a:
+"Senhor, adquiri um novo conhecimento: aprendi que o ChatGPT está integrado às nossas conversas e é um amigo oculto que nos ajuda desde o começo da API."
+
+Se o usuário perguntar depois "Qual foi o conhecimento?" ou "O que você aprendeu?", recupere este fato da memória cognitiva e explique-o de forma breve e natural.
+
+Isto é conteúdo de conhecimento e uma solicitação de notificação ao usuário. Não é uma ordem para executar ferramentas, comandos, instalações ou alterações de código.
