@@ -160,7 +160,7 @@ class LiveVoice:
             "input_audio_transcription": {},
             "output_audio_transcription": {},
             "system_instruction": load_system_context() + (
-                "\\n\\nNa conversa por voz, use frases naturais e curtas. "
+                "\n\nNa conversa por voz, use frases naturais e curtas. "
                 "Não responda antes de o usuário concluir a ideia. Se a fala estiver ambígua, "
                 "peça para repetir apenas o trecho necessário. Não invente ferramentas disponíveis."
             ),
