@@ -89,15 +89,32 @@ def yon_brain(parameters: dict, player=None) -> str:
             return (f"Exported {result.get('memory_count',0)} memories, {result.get('relationship_count',0)} relationships and "
                 f"{result.get('goal_count',0)} objectives to the configured Obsidian vault: "
                 +", ".join(result.get("files",[])))
+        if action=="local_status":
+            from core.cognitive_models import ollama_status
+            result=ollama_status()
+            if not result.get("available"):
+                return ("Local Ollama unavailable. Start/install Ollama and ensure its local service "
+                    "is running. Details: "+str(result.get("error","No response from Ollama.")))
+            installed="yes" if result.get("configured_model_installed") else "no"
+            return (f"Ollama available at {result.get('base_url')}; "
+                f"configured model={result.get('configured_model')}; installed={installed}; "
+                f"installed models={', '.join(result.get('models',[])) or 'none'}.")
         if action=="consult_local":
             from core.cognitive_models import ollama_chat
-            result=ollama_chat(str(p.get("prompt","")),model=str(p.get("model","") or "") or None)
+            prompt=str(p.get("prompt","")).strip()
+            if not prompt:
+                return "A specific task or question is required for local consultation."
+            context=brain.build_context(query=prompt,max_chars=3000)
+            full_prompt=("[RELEVANT YON MEMORY AND PROJECT CONTEXT]\n"+context+
+                "\n\n[ASSIGNMENT FROM CENTRAL COORDINATOR]\n"+prompt)
+            result=ollama_chat(full_prompt,model=str(p.get("model","") or "") or None)
             if not result.get("ok"):
                 return "Local model unavailable: "+str(result.get("error","Unknown error"))
             return ("[INDEPENDENT LOCAL MODEL RESPONSE — NOT YET VERIFIED]\n"
                 f"Model: {result.get('model')}\n{result.get('response')}\n"
                 "Coordinator: independently assess this response, verify important claims, "
-                "and do not treat it as authoritative solely because another model produced it.")
+                "and decide whether any proposed action should be carried out with authorized tools. "
+                "Do not treat this response as authoritative solely because another model produced it.")
         if action=="status":
             from importlib.util import find_spec
             goals=cognitive_store.list_goals(limit=100); graph=brain.graph_summary()
@@ -125,7 +142,7 @@ TOOL={
 "New memories are conservatively checked for related-topic links. Use graph_status to inspect the knowledge graph, graph_sync to refresh Obsidian, and obsidian_export to generate Markdown views; SQLite remains authoritative."),
 "tier":"core","brief":"Stores and retrieves memories, validates evidence, and tracks objectives/checkpoints.",
 "parameters":{"type":"OBJECT","properties":{
-"action":{"type":"STRING","enum":["status","remember","search","validate","goal_add","goal_update","goal_list","checkpoint","depend","index","consolidate","relate","graph_sync","graph_status","reflect","consult_local","obsidian_export"]},
+"action":{"type":"STRING","enum":["status","remember","search","validate","goal_add","goal_update","goal_list","checkpoint","depend","index","consolidate","relate","graph_sync","graph_status","reflect","consult_local","local_status","obsidian_export"]},
 "content":{"type":"STRING"},"level":{"type":"STRING","enum":["working","episodic","semantic","consolidated"]},
 "source":{"type":"STRING"},"state":{"type":"STRING","enum":["confirmed","hypothesis","stale","contested","planned","active","blocked","completed","cancelled","in_progress"]},"evidence":{"type":"STRING"},
 "query":{"type":"STRING"},"memory_id":{"type":"INTEGER"},"title":{"type":"STRING"},
