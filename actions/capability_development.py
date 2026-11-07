@@ -51,6 +51,7 @@ def _connect() -> sqlite3.Connection:
             workspace TEXT NOT NULL DEFAULT '',
             result_summary TEXT NOT NULL DEFAULT '',
             test_evidence TEXT NOT NULL DEFAULT '',
+            approach TEXT NOT NULL DEFAULT '',
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         )
@@ -65,6 +66,9 @@ def _connect() -> sqlite3.Connection:
             UNIQUE(topic_key, rejected_approach_key)
         )
     """)
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(capability_proposals)").fetchall()}
+    if "approach" not in columns:
+        conn.execute("ALTER TABLE capability_proposals ADD COLUMN approach TEXT NOT NULL DEFAULT ''")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_capability_status ON capability_proposals(status, id DESC)")
     return conn
 
@@ -83,7 +87,7 @@ def _key(value: str) -> str:
 def _proposal(conn, proposal_id):
     return conn.execute(
         "SELECT id,title,topic,topic_key,limitation,cloud_findings,implementation_plan,"
-        "risks,dependencies,test_plan,status,workspace,result_summary,test_evidence "
+        "risks,dependencies,test_plan,status,workspace,result_summary,test_evidence,approach "
         "FROM capability_proposals WHERE id=?",
         (int(proposal_id),),
     ).fetchone()
@@ -94,7 +98,7 @@ def _format_proposal(row) -> str:
         return "Capability proposal not found."
     keys = ("id", "title", "topic", "topic_key", "limitation", "cloud_findings",
             "implementation_plan", "risks", "dependencies", "test_plan", "status",
-            "workspace", "result_summary", "test_evidence")
+            "workspace", "result_summary", "test_evidence", "approach")
     item = dict(zip(keys, row))
     return (
         f"Proposal #{item['id']} — {item['title']}\n"
@@ -168,10 +172,10 @@ def capability_development(parameters: dict, player=None) -> str:
                 cur = conn.execute(
                     "INSERT INTO capability_proposals "
                     "(title,topic,topic_key,limitation,cloud_findings,implementation_plan,risks,"
-                    "dependencies,test_plan,status,created_at,updated_at) "
-                    "VALUES(?,?,?,?,?,?,?,?,?,'pending_approval',?,?)",
+                    "dependencies,test_plan,status,created_at,updated_at,approach) "
+                    "VALUES(?,?,?,?,?,?,?,?,?,'pending_approval',?,?,?)",
                     (title, topic, topic_key, limitation,
-                     _clean(p.get("cloud_findings")), _clean(p.get("implementation_plan")),
+                     _clean(p.get("cloud_findings")),  _clean(p.get("implementation_plan")),
                      _clean(p.get("risks")), _clean(p.get("dependencies"), 2000),
                      _clean(p.get("test_plan")), now, now),
                 )
@@ -237,7 +241,7 @@ def capability_development(parameters: dict, player=None) -> str:
                 if row[10] in {"integration_verified", "rejected", "cancelled"}:
                     return f"Cannot reject proposal in status {row[10]}."
                 reason = _clean(p.get("reason"), 1000)
-                approach = _clean(p.get("approach") or row[6] or row[5] or row[1], 1200)
+                approach = _clean(p.get("approach") or row[14] or row[6] or row[5] or row[1], 1200)
                 approach_key = _key(approach)
                 if approach_key:
                     conn.execute(
@@ -248,7 +252,7 @@ def capability_development(parameters: dict, player=None) -> str:
                 # Forget the rejected implementation details while retaining only
                 # the minimal filter needed to avoid repeating the same approach.
                 conn.execute(
-                    "UPDATE capability_proposals SET cloud_findings='',implementation_plan='',"
+                    "UPDATE capability_proposals SET approach='',cloud_findings='',implementation_plan='',"
                     "risks='',dependencies='',test_plan='',result_summary='',test_evidence='',"
                     "status='rejected',updated_at=? WHERE id=?",
                     (_now(), proposal_id),
