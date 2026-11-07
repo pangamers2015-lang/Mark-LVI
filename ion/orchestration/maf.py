@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from typing import Never
 
 from agent_framework import Executor, WorkflowBuilder, WorkflowContext, handler
 
@@ -12,7 +11,7 @@ class _IonSupervisorExecutor(Executor):
         super().__init__(id="ion-supervisor")
 
     @handler
-    async def execute(self, payload: str, ctx: WorkflowContext[Never, str]) -> None:
+    async def execute(self, payload: str, ctx: WorkflowContext[str, str]) -> None:
         request = json.loads(payload)
         result = await self.supervisor._execute_project(request)
         await ctx.yield_output(json.dumps(result, ensure_ascii=False))
