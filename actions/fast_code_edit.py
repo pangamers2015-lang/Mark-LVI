@@ -149,15 +149,10 @@ def fast_code_edit(parameters: dict, player=None, speak=None) -> str:
 TOOL = {
     "name": "fast_code_edit",
     "description": (
-        "FAST LOCAL CODE EDITOR for SIMPLE, SMALL changes to ONE existing file. "
-        "Use this INSTEAD OF dev_agent for a small, unambiguous one-file change. "
-        "If you do not know the exact source fragment, first call mode='search' "
-        "with a distinctive code token; this reads local source files only and "
-        "does not modify them. Then call mode='replace' with the exact unique "
-        "fragment, replacement and relative path. The replace mode makes a backup, "
-        "writes atomically and validates Python syntax. Do NOT guess source text "
-        "or paths. For multi-file work, investigation, debugging or refactoring, "
-        "use dev_agent. A successful file edit does not hot-reload running modules."
+        "LOW-LEVEL compatibility editor for an exact single-file replacement only. "
+        "The default route for software development, project changes, bug fixes and "
+        "multi-file tasks is ion_develop_project; do not bypass the Ion supervisor. "
+        "Use this tool only when the user explicitly asks for a precise direct edit."
     ),
     "parameters": {
         "type": "OBJECT",
@@ -171,7 +166,7 @@ TOOL = {
         },
         "required": []
     },
-    "tier": "core",
-    "brief": "Search local source or apply one exact, unique replacement with backup and syntax validation.",
+    "tier": "extra",
+    "brief": "Exceptional low-level file replacement only; use ion_develop_project by default.",
     "handler": fast_code_edit,
 }
