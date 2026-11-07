@@ -1619,16 +1619,12 @@ def dev_agent(
 TOOL = {
     "name": "dev_agent",
     "description": (
-        "The coding agent, running on the user's chosen coding model. "
-        "mode='improve' changes an EXISTING project folder — the uploaded one or "
-        "a path they name: fixes bugs, adds features, refactors. When a folder is "
-        "uploaded, ANY request to add, create or change something is improve. "
-        "Both modes run in the background with progress on screen. "
-        "mode='build' creates a brand-new standalone project, only when no "
-        "folder is meant. mode='status' reports what the coding agent is doing or "
-        "did — use it whenever the user asks about the coding work. "
-        "Before calling with improve or build, FIRST say one short sentence that "
-        "you are handing it to the coding agent, then call it in the same turn."),
+        "LEGACY compatibility coding tool. Do not use for new project development, "
+        "multi-file changes, feature work or debugging; use ion_develop_project instead. "
+        "The Ion Microsoft Agent Framework supervisor is the only route that coordinates "
+        "NVIDIA and Gemini and owns tests/approval. This remains temporarily available "
+        "only as a recovery path while the new supervisor is validated."
+    ),
     "parameters": {
         "type": "OBJECT",
         "properties": {
