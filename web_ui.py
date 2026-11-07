@@ -220,6 +220,16 @@ class _Handler(BaseHTTPRequestHandler):
                 return self._send(200, '{"ok":true}')
             except Exception as exc:
                 return self._send(500, json.dumps({"error": str(exc)}))
+        if path == "/api/audio-device":
+            if self.ui.on_audio_device_change:
+                threading.Thread(target=self.ui.on_audio_device_change, daemon=True).start()
+            return self._send(200, '{"ok":true}')
+        if path == "/api/remote":
+            try:
+                result = self.ui.on_remote_clicked() if self.ui.on_remote_clicked else None
+                return self._send(200, json.dumps({"result": result}, ensure_ascii=False, default=str))
+            except Exception as exc:
+                return self._send(500, json.dumps({"error": str(exc)}))
         if path == "/api/wake":
             try:
                 action = data.get("action")
