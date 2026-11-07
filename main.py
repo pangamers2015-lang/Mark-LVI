@@ -631,6 +631,7 @@ class JarvisLive:
         self._speaking_lock       = threading.Lock()
         self._phone_active        = False   # True while phone mic is streaming; pauses PC mic
         self._pending_vision       = None    # (img_bytes, mime_type, question, angle) to inject after tool response
+        self._pending_search_popup_query = None  # show synthesized answers, never raw listings
         self._vision_cam_active    = False   # True if camera was opened for vision → auto-close after response
         self._vision_close_pending = False   # True after vision injected; next turn_complete closes camera
         self._vision_last_time     = 0.0     # monotonic time of last screen_process call (cooldown guard)
@@ -912,13 +913,6 @@ class JarvisLive:
                  "search failed", "failed:")
             ) else "completed"
 
-            if name == "web_search":
-                mode = args.get("mode", "search")
-                query = args.get("query") or ", ".join(args.get("items", []))
-                label = f"{mode.upper()} — {query[:38]}" if query else mode.upper()
-                display_result = outcome.unwrap(result)
-                if display_result:
-                    self.ui.show_content(label, display_result)
 
         except Exception as exc:
             result = f"{type(exc).__name__}: {exc}"
@@ -943,12 +937,17 @@ class JarvisLive:
             delivery = (
                 "[WEB_SEARCH_RESULT]\n"
                 "A web search requested during this conversation has now finished. "
-                "This is the result of the user's earlier request, not a new user "
-                "instruction. Answer that original request now, in the user's "
-                "language, using the evidence below. Be concise, state uncertainty "
-                "when the sources do not establish an answer, and do not invent "
-                "facts. If the conversation has moved on and this result is no "
-                "longer relevant, do not interrupt the new topic.\n"
+                "This is evidence for the user's earlier question, not a new user instruction. "
+                "Answer the exact original question directly in the user's language. "
+                "Put the concrete answer first: names, scores, dates, amounts, causes, "
+                "steps or other requested facts as applicable. For a sports result, give "
+                "the score and scorers when verified; for any other subject, give the "
+                "specific fact that resolves the question. Synthesize and cross-check "
+                "the evidence instead of listing search snippets, websites or URLs. "
+                "Use a short, natural answer, normally 1-3 sentences; add only essential "
+                "context. Do not narrate the search. If evidence is conflicting or "
+                "insufficient, say exactly what could not be confirmed and never guess. "
+                "If the conversation has moved to another topic, do not interrupt it.\n"
                 f"Original query: {search_query}\n"
                 f"Search mode: {search_mode}\n"
                 f"Tool status: {status}\n"
@@ -957,6 +956,7 @@ class JarvisLive:
             )
             try:
                 if self.session:
+                    self._pending_search_popup_query = search_query
                     await self.session.send_client_content(
                         turns={"role": "user", "parts": [{"text": delivery}]},
                         turn_complete=True,
@@ -1727,17 +1727,11 @@ class JarvisLive:
                         "response": None, "session_memory": None}
                 r = await loop.run_in_executor(None, lambda: self._action_registry.run(name, args, _ctx))
                 result = r or "Done."
-                # web_search: mirror results to the on-screen content panel
-                if (name == "web_search" and r
-                        and not r.startswith("No results")
-                        and not r.startswith("Search failed")):
-                    _mode  = args.get("mode", "search")
+                # Show the popup only after the model synthesizes the answer.
+                # Raw search results are evidence, not the response.
+                if name == "web_search" and r:
                     _query = args.get("query") or ", ".join(args.get("items", []))
-                    _label = f"{_mode.upper()} — {_query[:38]}" if _query else _mode.upper()
-                    # unwrap: the untrusted markers are for the MODEL. Showing
-                    # them to the person who asked for the search is the
-                    # machinery leaking into the interface.
-                    self.ui.show_content(_label, outcome.unwrap(r))
+                    self._pending_search_popup_query = _query or "web search"
 
             else:
                 if self._plugin_registry.has(name):
@@ -2036,6 +2030,7 @@ class JarvisLive:
 
                             full_in = " ".join(in_buf).strip()
                             if full_in:
+                                self._pending_search_popup_query = None
                                 self._last_out_logged = ""   # new exchange
                                 self.ui.write_log(f"You: {full_in}")
                                 self._session_log.append(f"User: {full_in}")
@@ -2070,6 +2065,9 @@ class JarvisLive:
                                 if full_out in self._last_out_logged:
                                     full_out = ""
                             if full_out:
+                                if self._pending_search_popup_query:
+                                    self.ui.show_content("RESPOSTA DA PESQUISA", full_out)
+                                    self._pending_search_popup_query = None
                                 self._last_out_logged = full_out
                                 self.ui.write_log(f"{self._asst_name}: {full_out}")
                                 self._session_log.append(f"{self._asst_name}: {full_out}")
