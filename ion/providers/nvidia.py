@@ -30,15 +30,22 @@ class NvidiaProvider:
             ],
             "temperature": 0.2,
             "max_tokens": 16000,
-            "reasoning_effort": "medium",
-            "chat_template_kwargs": {
-                "enable_thinking": True,
-                "force_nonempty_content": True,
-            },
             "stream": False,
         }
         if json_mode:
+            # Constrained JSON is more reliable with visible thinking disabled.
             body["response_format"] = {"type": "json_object"}
+            body["reasoning_effort"] = "none"
+            body["chat_template_kwargs"] = {
+                "enable_thinking": False,
+                "force_nonempty_content": True,
+            }
+        else:
+            body["reasoning_effort"] = "medium"
+            body["chat_template_kwargs"] = {
+                "enable_thinking": True,
+                "force_nonempty_content": True,
+            }
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.post(
                 f"{self.base_url}/chat/completions",
