@@ -19,6 +19,7 @@ def ollama_chat(
     prompt: str,
     model: str | None = None,
     timeout: float | None = None,
+    profile: str = "compact",
 ) -> dict:
     """Ask Ollama for an independent draft.
 
@@ -42,21 +43,25 @@ def ollama_chat(
             "error": "Set YON_LOCAL_MODEL or provide a model name installed in Ollama.",
         }
 
+    profile = str(profile or "compact").strip().lower()
+    budgets = {"compact": 160, "analysis": 320, "code": 448, "review": 224}
+    if profile not in budgets:
+        profile = "compact"
+    system_prompt = (
+        "You are Yon's local specialist, subordinate to the central coordinator. "
+        "Answer only the assigned task; be concise and actionable. "
+        "Return conclusions and essential evidence or uncertainty only. "
+        "Do not greet, repeat context, narrate private reasoning, or invent facts. "
+        "Never claim tools, execution, or verification you did not perform. "
+        "The coordinator validates your output and owns decisions."
+    )
     payload = json.dumps({
         "model": model_name,
         "messages": [
-            {
-                "role": "system",
-                "content": (
-                    "You are Yon's local specialist model. Give a careful independent "
-                    "analysis. Separate facts from assumptions, state uncertainty, "
-                    "and do not claim tool actions or external verification you did "
-                    "not perform. The central coordinator will review your response. "
-                    "You do not replace the coordinator or make final decisions."
-                ),
-            },
-            {"role": "user", "content": prompt[:12000]},
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": prompt[:6000]},
         ],
+        "options": {"num_predict": budgets[profile], "temperature": 0.2},
         "stream": False,
     }).encode("utf-8")
 
