@@ -83,8 +83,9 @@ TOOL={
 "validation, objectives, checkpoints, knowledge relationships and metacognitive assessment. "
 "Use remember only for durable useful knowledge, not every utterance. Prefer hypothesis unless "
 "evidence justifies confirmed. Use checkpoint after meaningful progress and goal_add for multi-step "
-"work. Search before repeating known procedures. Use reflect to assess complex requests. Use status "
-"to inspect the brain."),
+"work. Use goal_update for objective lifecycle, depend for cycle-safe prerequisites, index for "
+"optional semantic indexing, and consolidate only confirmed memories with evidence. Search before "
+"repeating known procedures. Use reflect to assess complex requests. Use status to inspect the brain."),
 "tier":"core","brief":"Stores and retrieves memories, validates evidence, and tracks objectives/checkpoints.",
 "parameters":{"type":"OBJECT","properties":{
 "action":{"type":"STRING","enum":["status","remember","search","validate","goal_add","goal_update","goal_list","checkpoint","depend","index","consolidate","relate","reflect"]},
