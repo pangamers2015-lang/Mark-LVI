@@ -36,7 +36,7 @@
   <div class="settings-top"><span>Configurações</span><button class="iconbtn" id="closeSettings">×</button></div>
   <label for="apiKey">Chave da API Gemini</label><input id="apiKey" type="password" autocomplete="off" placeholder="Cole sua chave API">
   <button class="primary" id="saveKey">Salvar chave</button>
-  <div class="note">A chave fica salva localmente em Yon/config/api_key.json e não é enviada ao navegador. Modelo de conversa: Gemini 2.5 Flash.</div>
+  <div class="note">A chave fica salva localmente em Yon/config/api_key.json. Voz em tempo real: Gemini Live; conversa digitada: Gemini 2.5 Flash.</div>
   <div class="note" id="voiceSupport">Voz: verificando suporte do navegador…</div>
  </div>
 </div>
@@ -44,7 +44,7 @@
 <script>
 (()=> {
 const $=id=>document.getElementById(id), canvas=$("scene"),ctx=canvas.getContext("2d");
-let w=0,h=0,dpr=1,tick=0,voiceActive=false,recognition=null,speaking=false,selectedFile=null,requestBusy=false;
+let w=0,h=0,dpr=1,tick=0,voiceActive=false,speaking=false,selectedFile=null,requestBusy=false,lastTranscriptNode=null;
 function resize(){dpr=Math.min(devicePixelRatio||1,2);w=innerWidth;h=innerHeight;canvas.width=w*dpr;canvas.height=h*dpr;canvas.style.width=w+"px";canvas.style.height=h+"px";ctx.setTransform(dpr,0,0,dpr,0,0)}
 addEventListener("resize",resize);resize();
 function orb(){
@@ -61,12 +61,12 @@ function toast(s){$("toast").textContent=s;$("toast").classList.add("show");setT
 function addMessage(text,who){const d=document.createElement("div");d.className="msg "+who;d.textContent=text;$("messages").appendChild(d);$("messages").scrollTop=$("messages").scrollHeight;return d}
 function state(s){document.body.dataset.state=s;$("stateText").textContent=({idle:"PRONTO",listening:"OUVINDO",thinking:"PENSANDO",speaking:"FALANDO"})[s]||"PRONTO"}
 function stopSpeech(){if("speechSynthesis"in window)speechSynthesis.cancel();speaking=false;state(voiceActive?"listening":"idle")}
-function speak(text){if(!("speechSynthesis"in window))return;stopSpeech();const u=new SpeechSynthesisUtterance(text);u.lang="pt-BR";u.rate=1.02;u.pitch=1.0;u.onstart=()=>{speaking=true;state("speaking")};u.onend=()=>{speaking=false;state(voiceActive?"listening":"idle")};u.onerror=()=>{speaking=false;state("idle")};speechSynthesis.speak(u)}
+function speak(text){/* O áudio de resposta é reproduzido pelo fluxo Gemini Live no backend. */}
 async function sendMessage(text,fromVoice=false){
  text=(text||"").trim();if(!text||requestBusy)return;
  stopSpeech();requestBusy=true;state("thinking");addMessage(text,"user");
  const payload={message:text};if(selectedFile){payload.attachment=selectedFile;addMessage("Arquivo anexado: "+selectedFile.name,"system");selectedFile=null;$("fileInput").value=""}
- try{const r=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});const d=await r.json();if(!r.ok||!d.ok)throw new Error(d.error||"Falha ao conversar.");addMessage(d.answer,"yon");if(fromVoice)speak(d.answer);else state(voiceActive?"listening":"idle")}
+ try{const r=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});const d=await r.json();if(!r.ok||!d.ok)throw new Error(d.error||"Falha ao conversar.");if(!d.live){addMessage(d.answer,"yon");state(voiceActive?"listening":"idle")}}
  catch(e){addMessage("Não consegui concluir: "+e.message,"system");toast(e.message);state("idle")}
  finally{requestBusy=false}
 }
@@ -77,29 +77,23 @@ document.addEventListener("dragover",e=>{e.preventDefault()});document.addEventL
 function openChat(){$("chat").classList.add("open");document.body.classList.add("chat-open");$("textInput").focus()}
 function closeChat(){document.body.classList.remove("chat-open")}
 $("closeChat").onclick=closeChat;
-$("gear").onclick=async()=>{$("settings").classList.add("open");try{const r=await fetch("/api/config");const d=await r.json();$("voiceSupport").textContent="Voz: "+(window.SpeechRecognition||window.webkitSpeechRecognition?"reconhecimento disponível":"reconhecimento não suportado neste navegador")+" · "+(d.configured?"API configurada":"API ainda não configurada")}catch(_){}};
+$("gear").onclick=async()=>{$("settings").classList.add("open");try{const r=await fetch("/api/config");const d=await r.json();$("voiceSupport").textContent="Voz: Gemini Live · "+(d.voice_running?"conectada":d.configured?"iniciando":"API ainda não configurada")}catch(_){}};
 $("closeSettings").onclick=()=>$("settings").classList.remove("open");
 $("settings").onclick=e=>{if(e.target===$("settings"))$("settings").classList.remove("open")};
 $("saveKey").onclick=async()=>{const key=$("apiKey").value.trim();if(!key){toast("Informe a chave Gemini.");return}try{const r=await fetch("/api/config",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({api_key:key})});if(!r.ok)throw new Error("Não foi possível salvar.");$("apiKey").value="";$("settings").classList.remove("open");toast("Chave salva localmente.")}catch(e){toast(e.message)}};
-function startVoice(){
- const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){toast("Use Chrome ou Edge para reconhecimento de voz.");return}
- if(recognition)return;
- recognition=new SR();recognition.lang="pt-BR";recognition.continuous=true;recognition.interimResults=true;recognition.maxAlternatives=1;
- let finalText="",sendTimer=null;
- recognition.onstart=()=>{voiceActive=true;state("listening")};
- recognition.onresult=e=>{let interim="";for(let i=e.resultIndex;i<e.results.length;i++){const part=e.results[i][0].transcript;if(e.results[i].isFinal)finalText+=" "+part;else interim+=part}
- if(interim&&speaking)stopSpeech();
- if(finalText.trim()){clearTimeout(sendTimer);sendTimer=setTimeout(()=>{const text=finalText.trim();finalText="";if(text)sendMessage(text,true)},950)}
- };
- recognition.onerror=e=>{if(e.error!=="no-speech"&&e.error!=="aborted")toast("Microfone: "+e.error)};
- recognition.onend=()=>{recognition=null;if(voiceActive){setTimeout(startVoice,350)}else state("idle")};
- try{recognition.start()}catch(_){recognition=null}
-}
-function stopVoice(){voiceActive=false;if(recognition){const r=recognition;recognition=null;try{r.onend=null;r.stop()}catch(_){}}stopSpeech();state("idle")}
+async function startVoice(){try{const r=await fetch("/api/voice/start",{method:"POST"});const d=await r.json();if(!r.ok||!d.ok)throw new Error(d.error||"Não foi possível iniciar o microfone.");toast("Conectando ao Gemini Live...")}catch(e){toast(e.message)}}
+async function stopVoice(){try{await fetch("/api/voice/stop",{method:"POST"})}catch(_){}voiceActive=false;state("idle")}
 $("orbHint").textContent="T · abrir conversa  /  clique na Orb para iniciar a voz";
 canvas.addEventListener("click",()=>{if(voiceActive)stopVoice();else startVoice()});
+const events=new EventSource("/api/events");
+events.onmessage=e=>{try{const d=JSON.parse(e.data);
+ if(d.type==="voice_state"){voiceActive=!["stopped","idle"].includes(d.state);speaking=d.state==="speaking";state(d.state==="connecting"?"thinking":d.state==="speaking"?"speaking":d.state==="listening"?"listening":"idle")}
+ else if(d.type==="voice_error"){toast(d.text||"Falha na conexão de voz.");state("idle")}
+ else if(d.type==="transcript"){if(d.speaker==="user"){lastTranscriptNode=addMessage(d.text,"user")}else{if(!lastTranscriptNode||!lastTranscriptNode.classList.contains("yon"))lastTranscriptNode=addMessage(d.text,"yon");else lastTranscriptNode.textContent+=" "+d.text;$("messages").scrollTop=$("messages").scrollHeight}}
+ else if(d.type==="turn_complete"){lastTranscriptNode=null}
+ }catch(_){}};
 addEventListener("keydown",e=>{if(e.key==="Escape"){closeChat();$("settings").classList.remove("open")}if(e.key.toLowerCase()==="t"&&!e.repeat&&!["INPUT","TEXTAREA"].includes(document.activeElement.tagName))openChat()});
-(async()=>{try{const r=await fetch("/api/config");const d=await r.json();if(!d.configured)toast("Configure a API Gemini na engrenagem para conversar.")}catch(_){}})();
+(async()=>{try{const r=await fetch("/api/config");const d=await r.json();if(!d.configured)toast("Configure a API Gemini na engrenagem para conversar.");else startVoice()}catch(_){}})();
 })();
 </script>
 </body></html>
