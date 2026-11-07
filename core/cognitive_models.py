@@ -61,6 +61,10 @@ def ollama_chat(
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt[:6000]},
         ],
+        # Qwen3.5 may spend a small compact token budget on internal thinking
+        # and return no user-facing message.content. Keep compact calls direct;
+        # preserve Ollama's thinking behavior for the deeper specialist profiles.
+        "think": profile != "compact",
         "options": {"num_predict": budgets[profile], "temperature": 0.2},
         "stream": False,
     }).encode("utf-8")
@@ -81,8 +85,11 @@ def ollama_chat(
         if not answer:
             return {
                 "ok": False,
-                "error": "Ollama returned an empty response.",
+                "error": "Ollama returned no visible answer. "
+                         "The model may have produced only internal thinking; "
+                         "try the compact profile or increase the response budget.",
                 "model": model_name,
+                "done_reason": data.get("done_reason"),
             }
         return {
             "ok": True,
