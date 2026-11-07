@@ -12,6 +12,7 @@ import json
 import os
 import sqlite3
 import tempfile
+import threading
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -29,6 +30,7 @@ GITHUB_BRANCH = os.environ.get("YON_GITHUB_BRANCH", "feature/behavioral-preferen
 GITHUB_POLL_SECONDS = max(10, min(int(os.environ.get("YON_GITHUB_POLL_SECONDS", "15")), 300))
 _REMOTE_ETAG = None
 _REMOTE_COMMIT = None
+_PROCESS_LOCK = threading.Lock()
 DEFAULT_INBOX = Path(__file__).resolve().parents[1] / "knowledge" / "inbox"
 
 
@@ -136,7 +138,7 @@ def _interpret(text: str, filename: str) -> dict:
             "startup_instruction": startup, "speech_text": speech}
 
 
-def process_inbox(root=None, interpreter=None) -> dict:
+def _process_inbox(root=None, interpreter=None) -> dict:
     """Interpret unprocessed .txt files; safe to call at every startup."""
     inbox = Path(root) if root else DEFAULT_INBOX
     counts = {"processed": 0, "already_processed": 0, "skipped": 0}
@@ -216,6 +218,12 @@ def process_inbox(root=None, interpreter=None) -> dict:
     except Exception as exc:
         return {"ok": False, **counts, "errors": [type(exc).__name__ + ": " + str(exc)]}
     return {"ok": not errors, **counts, "errors": errors}
+
+
+def process_inbox(root=None, interpreter=None) -> dict:
+    """Serialize local and remote inbox imports to prevent duplicate writes."""
+    with _PROCESS_LOCK:
+        return _process_inbox(root=root, interpreter=interpreter)
 
 
 
