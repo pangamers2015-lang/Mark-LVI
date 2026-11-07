@@ -9,6 +9,8 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from knowledge_base import load_system_context
+
 ROOT = Path(__file__).resolve().parent
 WEB = ROOT / "web"
 CONFIG = ROOT / "config" / "api_key.json"
@@ -19,6 +21,8 @@ _clients: list[queue.Queue] = []
 _clients_lock = threading.Lock()
 _voice = None
 _server = None
+_shutdown_lock = threading.Lock()
+_shutdown_requested = False
 
 
 def publish(event: dict):
@@ -79,10 +83,10 @@ def ask_gemini(message: str, attachment: dict | None = None) -> str:
         content = str(attachment["text"])[:1_000_000]
         prompt += f"\n\nConteúdo do arquivo anexado ({name}):\n{content}"
     payload = {
-        "system_instruction": {"parts": [{"text": (
-            "Você é Yon, um agente pessoal. Responda em português brasileiro por padrão, "
-            "com naturalidade, clareza e concisão. Nesta versão inicial, converse e analise "
-            "texto e anexos; ainda não execute ações no computador."
+        "system_instruction": {"parts": [{"text": load_system_context() + (
+            "\\n\\nNesta versão, você pode conversar e analisar texto/anexos. "
+            "Não afirme que controla o computador ou executa ferramentas: isso ainda depende "
+            "de integrações disponíveis e permissões explícitas."
         )}]},
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
         "generationConfig": {"temperature": 0.7, "maxOutputTokens": 1200},
@@ -174,13 +178,22 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         try:
+            if self.path == "/api/shutdown":
+                global _shutdown_requested
+                with _shutdown_lock:
+                    if not _shutdown_requested:
+                        _shutdown_requested = True
+                        self.send_json(200, {"ok": True, "message": "Yon está encerrando."})
+                        def finish_shutdown():
+                            if _voice:
+                                _voice.stop()
+                            if _server is not None:
+                                _server.shutdown()
+                        threading.Thread(target=finish_shutdown, daemon=True, name="yon-shutdown").start()
+                    else:
+                        self.send_json(200, {"ok": True, "message": "Encerramento já solicitado."})
+                return
             if self.path == "/api/client/closing":
-                def shutdown_if_unused():
-                    if not _clients and _server is not None:
-                        if _voice:
-                            _voice.stop()
-                        threading.Thread(target=_server.shutdown, daemon=True).start()
-                threading.Timer(16.5, shutdown_if_unused).start()
                 self.send_json(200, {"ok": True})
                 return
             data = self.read_json()
