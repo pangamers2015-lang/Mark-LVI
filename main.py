@@ -95,7 +95,8 @@ from core                      import undo as undo_stack
 from core                      import confirm as confirm_gate
 from core                      import audio_devices
 from core.action_loader        import discover_actions
-from core.echo                 import BargeInDetector, EchoGuard
+from core.barge_in             import BargeInDetector
+from core.echo                 import EchoGuard
 from core.viseme               import VisemeStream
 from core.wake_word            import (
     WakeWordDetector, is_ready as wake_is_ready, install_and_download as wake_install,
