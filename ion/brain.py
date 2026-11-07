@@ -93,5 +93,12 @@ REGRAS:
 - Os comandos de teste devem usar somente Python/pytest/unittest/compileall, Node --check, npm test/build ou Playwright.
 - Não escolha tecnologias que contrariem restrições expressas pelo usuário.
 """
-        raw = await provider.complete(system, prompt, json_mode=True)
+        try:
+            raw = await provider.complete(system, prompt, json_mode=True)
+        except Exception as primary_error:
+            other = "nvidia" if provider_name == "gemini" else "gemini"
+            if not config.api_key(other):
+                raise RuntimeError(f"Planejador {provider_name} indisponível e {other} sem chave: {primary_error}") from primary_error
+            provider = self.providers[other]
+            raw = await provider.complete(system, prompt, json_mode=True)
         return ProjectPlan.from_dict(extract_json(raw))
