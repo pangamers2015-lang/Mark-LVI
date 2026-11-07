@@ -29,7 +29,6 @@ GITHUB_REPOSITORY = os.environ.get("YON_GITHUB_REPOSITORY", "pangamers2015-lang/
 GITHUB_BRANCH = os.environ.get("YON_GITHUB_BRANCH", "feature/behavioral-preferences")
 GITHUB_POLL_SECONDS = max(10, min(int(os.environ.get("YON_GITHUB_POLL_SECONDS", "15")), 300))
 _REMOTE_ETAG = None
-_REMOTE_COMMIT = None
 _PROCESS_LOCK = threading.Lock()
 DEFAULT_INBOX = Path(__file__).resolve().parents[1] / "knowledge" / "inbox"
 
@@ -250,54 +249,61 @@ def _github_json(url: str, etag: str | None = None):
 
 
 def _fetch_remote_txt_files():
-    """Fetch only bounded TXT blobs from the configured GitHub branch."""
-    global _REMOTE_ETAG, _REMOTE_COMMIT
+    """Fetch bounded TXT files recursively, using the inbox directory ETag."""
+    global _REMOTE_ETAG
     owner_repo = GITHUB_REPOSITORY.strip("/")
     if "/" not in owner_repo:
         raise ValueError("YON_GITHUB_REPOSITORY must be owner/repository.")
     owner, repo = owner_repo.split("/", 1)
     api = f"https://api.github.com/repos/{owner}/{repo}"
-    encoded_branch = urllib.parse.quote(GITHUB_BRANCH, safe="")
-    commit, etag, unchanged = _github_json(
-        f"{api}/commits/{encoded_branch}", _REMOTE_ETAG)
+    ref_query = urllib.parse.urlencode({"ref": GITHUB_BRANCH})
+
+    def list_directory(path: str, etag: str | None = None):
+        encoded_path = urllib.parse.quote(path, safe="/")
+        url = f"{api}/contents/{encoded_path}?{ref_query}"
+        return _github_json(url, etag)
+
+    root_entries, etag, unchanged = list_directory("knowledge/inbox", _REMOTE_ETAG)
     if unchanged:
         return None
-    if not isinstance(commit, dict) or not commit.get("sha"):
-        raise ValueError("GitHub did not return the configured branch commit.")
-    commit_sha = commit["sha"]
-    tree_sha = (commit.get("commit", {}).get("tree") or {}).get("sha")
-    if not tree_sha:
-        raise ValueError("GitHub commit did not include a tree SHA.")
-    if commit_sha == _REMOTE_COMMIT:
-        _REMOTE_ETAG = etag or _REMOTE_ETAG
-        return []
-    tree, _, _ = _github_json(f"{api}/git/trees/{tree_sha}?recursive=1")
-    if tree.get("truncated"):
-        raise ValueError("GitHub tree is truncated; refusing an incomplete inbox scan.")
-    entries = [
-        item for item in tree.get("tree", [])
-        if item.get("type") == "blob"
-        and item.get("path", "").startswith("knowledge/inbox/")
-        and item.get("path", "").lower().endswith(".txt")
-        and 0 < int(item.get("size") or 0) <= MAX_FILE_BYTES
-    ]
+    if not isinstance(root_entries, list):
+        raise ValueError("GitHub did not return the inbox directory listing.")
+
     documents = []
-    for item in entries:
-        blob, _, _ = _github_json(f"{api}/git/blobs/{item['sha']}")
-        if blob.get("encoding") != "base64":
-            raise ValueError("GitHub returned an unsupported TXT blob encoding.")
-        raw = base64.b64decode(blob.get("content", ""), validate=False)
-        if not raw or len(raw) > MAX_FILE_BYTES:
-            continue
-        relative = item["path"][len("knowledge/inbox/"):]
-        safe = Path(relative)
-        if safe.is_absolute() or ".." in safe.parts or safe.suffix.lower() != ".txt":
-            continue
-        documents.append((safe.as_posix(), raw))
-    _REMOTE_COMMIT = commit_sha
+
+    def visit(entries, parent_path):
+        for item in entries:
+            path = str(item.get("path", ""))
+            if not path.startswith("knowledge/inbox/"):
+                continue
+            kind = item.get("type")
+            if kind == "dir":
+                nested, _, _ = list_directory(path)
+                if isinstance(nested, list):
+                    visit(nested, path)
+                continue
+            if (
+                kind != "file"
+                or not path.lower().endswith(".txt")
+                or not 0 < int(item.get("size") or 0) <= MAX_FILE_BYTES
+            ):
+                continue
+            encoded_file = urllib.parse.quote(path, safe="/")
+            blob, _, _ = _github_json(f"{api}/contents/{encoded_file}?{ref_query}")
+            if blob.get("encoding") != "base64":
+                raise ValueError(f"GitHub returned an unsupported encoding for {path}.")
+            raw = base64.b64decode(blob.get("content", ""), validate=False)
+            if not raw or len(raw) > MAX_FILE_BYTES:
+                continue
+            relative = path[len("knowledge/inbox/"):]
+            safe = Path(relative)
+            if safe.is_absolute() or ".." in safe.parts or safe.suffix.lower() != ".txt":
+                continue
+            documents.append((safe.as_posix(), raw))
+
+    visit(root_entries, "knowledge/inbox")
     _REMOTE_ETAG = etag or _REMOTE_ETAG
     return documents
-
 
 def process_remote_inbox() -> dict:
     """Poll GitHub and process TXT files without changing the local checkout."""
