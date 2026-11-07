@@ -14,7 +14,7 @@ class KnowledgeBaseTests(unittest.TestCase):
     def test_system_context_sets_execution_boundaries(self):
         context = load_system_context()
         self.assertIn("sem evidência", context)
-        self.assertIn("permissões explícitas", context)
+        self.assertIn("integradas e autorizadas", context)
 
 
 if __name__ == "__main__":
