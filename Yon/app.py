@@ -84,7 +84,7 @@ def ask_gemini(message: str, attachment: dict | None = None) -> str:
         prompt += f"\n\nConteúdo do arquivo anexado ({name}):\n{content}"
     payload = {
         "system_instruction": {"parts": [{"text": load_system_context() + (
-            "\\n\\nNesta versão, você pode conversar e analisar texto/anexos. "
+            "\n\nNesta versão, você pode conversar e analisar texto/anexos. "
             "Não afirme que controla o computador ou executa ferramentas: isso ainda depende "
             "de integrações disponíveis e permissões explícitas."
         )}]},
