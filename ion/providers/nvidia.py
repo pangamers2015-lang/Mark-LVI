@@ -30,6 +30,11 @@ class NvidiaProvider:
             ],
             "temperature": 0.2,
             "max_tokens": 16000,
+            "reasoning_effort": "medium",
+            "chat_template_kwargs": {
+                "enable_thinking": True,
+                "force_nonempty_content": True,
+            },
             "stream": False,
         }
         if json_mode:
