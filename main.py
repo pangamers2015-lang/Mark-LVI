@@ -637,6 +637,15 @@ class JarvisLive:
         _recovered_work = work_journal.recover_interrupted()
         for _item in _recovered_work:
             self._background_task_records[_item["id"]] = _item
+            try:
+                cognitive_save_checkpoint(
+                    summary=f"Background task {_item.get('id')} was interrupted by an application restart.",
+                    next_step="Inspect the task record and current external state before deciding whether it is safe to resume.",
+                    status="interrupted",
+                    evidence=str(_item.get("recovery") or "Recovered from the local work journal."),
+                )
+            except Exception as _brain_error:
+                print(f"[YonBrain] Recovery checkpoint skipped: {_brain_error}")
         self._is_speaking         = False
         self._speaking_lock       = threading.Lock()
         self._phone_active        = False   # True while phone mic is streaming; pauses PC mic
@@ -1655,6 +1664,15 @@ class JarvisLive:
                     "finished_at": "",
                 }
                 work_journal.save_task(self._background_task_records[task_id])
+                try:
+                    cognitive_save_checkpoint(
+                        summary=f"Background task {task_id} ({name}) started.",
+                        next_step="Wait for the recorded task result, then verify its effects.",
+                        status="running",
+                        evidence=str(self._background_task_records[task_id].get("summary") or ""),
+                    )
+                except Exception as _brain_error:
+                    print(f"[YonBrain] Start checkpoint skipped: {_brain_error}")
                 if len(self._background_task_records) > 40:
                     completed = [
                         key for key, value in self._background_task_records.items()
