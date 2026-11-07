@@ -74,9 +74,8 @@ def _safe_failure(value: str) -> str:
         r"(?i)(api[_-]?key|token|password|secret)\s*[:=]\s*[^\s,;]+",
         r"\1=[REDACTED]", text
     )
+    text = re.sub(r"(?i)[A-Z]:\\Users\\[^\\\s]+", "[LOCAL_USER_PATH]", text)
     return text
-
-
 def _topic_for(tool_name: str, args: dict) -> str:
     keys = " ".join(str(k).casefold() for k in args)
     values = " ".join(str(v).casefold()[:100] for v in args.values() if isinstance(v, str))
@@ -115,7 +114,7 @@ def _structured_findings(text: str) -> dict:
 
 def capability_recovery(parameters: dict, player=None) -> str:
     p = parameters or {}
-    task = str(p.get("task") or "").strip()
+    task = _safe_failure(str(p.get("task") or "").strip())
     limitation = _safe_failure(str(p.get("limitation") or p.get("failure_result") or ""))
     failed_tool = str(p.get("failed_tool") or "not identified").strip()[:100]
     raw_args = p.get("failed_args") if isinstance(p.get("failed_args"), dict) else {}
@@ -126,9 +125,15 @@ def capability_recovery(parameters: dict, player=None) -> str:
         return "Capability investigation requires the user's task and a concrete technical limitation."
 
     try:
-        from actions.capability_development import capability_development
+        from actions.capability_development import active_proposal_for_topic, capability_development
         from actions.fcc_cloud import fcc_cloud
 
+        existing = active_proposal_for_topic(topic)
+        if existing:
+            return (
+                "An update note for this capability is already active. Do not repeat the Cloud research.\\n"
+                + existing
+            )
         rejected = capability_development({"action": "rejected_approaches", "topic": topic})
         cloud_task = (
             "Research a technical capability gap for the Yon desktop assistant. This is a RESEARCH-ONLY task. "
