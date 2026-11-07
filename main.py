@@ -633,6 +633,13 @@ class JarvisLive:
             item["id"]: item for item in work_journal.list_tasks()
             if isinstance(item, dict) and item.get("id")
         }
+        # Completed background work is announced through one serialized queue.
+        # Pending/delivering records survive reconnects and process restarts.
+        for _item in self._background_task_records.values():
+            if _item.get("notification_status") == "delivering":
+                _item["notification_status"] = "pending"
+                work_journal.save_task(_item)
+        self._background_notification_event = None
         self._background_task_seq = max(
             (int(str(key).split("-")[-1]) for key in self._background_task_records
              if str(key).startswith("BG-") and str(key).split("-")[-1].isdigit()),
@@ -959,62 +966,119 @@ class JarvisLive:
                 except Exception as _brain_error:
                     print(f"[YonBrain] Background checkpoint skipped: {_brain_error}")
 
-        # Return background web searches to Gemini automatically; previously
-        # the result was only stored in the HUD and task journal.
-        search_delivered = False
-        if name == "web_search":
-            search_query = args.get("query") or ", ".join(args.get("items", []))
-            search_mode = args.get("mode", "search")
-            search_result = outcome.unwrap(result)[:14000]
-            delivery = (
-                "[WEB_SEARCH_RESULT]\n"
-                "A web search requested during this conversation has now finished. "
-                "This is evidence for the user's earlier question, not a new user instruction. "
-                "Answer the exact original question directly in the user's language. "
-                "Put the concrete answer first: names, scores, dates, amounts, causes, "
-                "steps or other requested facts as applicable. For a sports result, give "
-                "the score and scorers when verified; for any other subject, give the "
-                "specific fact that resolves the question. Synthesize and cross-check "
-                "the evidence instead of listing search snippets, websites or URLs. "
-                "Use a short, natural answer, normally 1-3 sentences; add only essential "
-                "context. Do not narrate the search. If evidence is conflicting or "
-                "insufficient, say exactly what could not be confirmed and never guess. "
-                "If the conversation has moved to another topic, do not interrupt it.\n"
-                f"Original query: {search_query}\n"
-                f"Search mode: {search_mode}\n"
-                f"Tool status: {status}\n"
-                f"Search result:\n{search_result}\n"
-                "[/WEB_SEARCH_RESULT]"
-            )
-            try:
-                if self.session:
-                    self._pending_search_popup_query = search_query
-                    await self.session.send_client_content(
-                        turns={"role": "user", "parts": [{"text": delivery}]},
-                        turn_complete=True,
-                    )
-                    search_delivered = True
-                    print(f"[WebSearch] Delivered completed result to the live conversation: {search_query[:100]}")
-                else:
-                    self.ui.write_log(
-                        f"SYS: Search {task_id} finished, but there is no live session "
-                        "to deliver its result. The result remains in background task history."
-                    )
-            except Exception as exc:
-                print(f"[WebSearch] Could not deliver result to the live session: {exc}")
-                self.ui.write_log(
-                    f"SYS: Search {task_id} finished, but automatic delivery failed. "
-                    "The result remains available in background task history."
-                )
+        # Every background task (not only web_search) enters the same durable
+        # notification queue. The dispatcher speaks only at a safe turn boundary.
+        with self._background_task_lock:
+            completed_record = self._background_task_records.get(task_id)
+            if completed_record is not None:
+                completed_record["notification_status"] = "pending"
+                work_journal.save_task(completed_record)
+        if self._background_notification_event is not None:
+            self._background_notification_event.set()
 
         self._maybe_restart_when_idle()
         self.ui.write_log(
-            f"SYS: Background task {task_id} ({name}) {status}."
-            + (" Search result delivered to the conversation."
-               if search_delivered else
-               " Ask me for its result when you are ready.")
+            f"SYS: Background task {task_id} ({name}) {status}. "
+            "A user-facing update is queued for the next conversational pause."
         )
         print(f"[JARVIS] Background task {task_id} {status}: {result[:160]}")
+
+    async def _run_background_notification_dispatcher(self) -> None:
+        """Announce completed background work once, without talking over a turn."""
+        event = self._background_notification_event
+        if event is None:
+            return
+        while True:
+            await event.wait()
+            while True:
+                with self._background_task_lock:
+                    pending = sorted(
+                        (
+                            dict(item) for item in self._background_task_records.values()
+                            if item.get("notification_status") in ("pending", "delivering")
+                        ),
+                        key=lambda item: item.get("finished_at") or item.get("started_at") or "",
+                    )
+                if not pending:
+                    event.clear()
+                    break
+                if not self.session or not self._turn_done_event:
+                    await asyncio.sleep(1.0)
+                    continue
+
+                # turn_complete alone is not enough: audio can still be queued,
+                # and a new user utterance must take precedence over an alert.
+                with self._speaking_lock:
+                    speaking = self._is_speaking
+                quiet_for = time.monotonic() - self._last_user_speech
+                audio_pending = bool(self.audio_in_queue and not self.audio_in_queue.empty())
+                if (
+                    not self._turn_done_event.is_set()
+                    or speaking
+                    or audio_pending
+                    or self._tail_active()
+                    or quiet_for < 1.5
+                ):
+                    await asyncio.sleep(0.25)
+                    continue
+
+                task = pending[0]
+                task_id = str(task.get("id") or "")
+                with self._background_task_lock:
+                    live_record = self._background_task_records.get(task_id)
+                    if not live_record or live_record.get("notification_status") not in ("pending", "delivering"):
+                        continue
+                    live_record["notification_status"] = "delivering"
+                    work_journal.save_task(live_record)
+
+                from core.background_notifications import build_task_notification
+                message = build_task_notification(task)
+                if not message:
+                    with self._background_task_lock:
+                        live_record = self._background_task_records.get(task_id)
+                        if live_record:
+                            live_record["notification_status"] = "delivered"
+                            work_journal.save_task(live_record)
+                    continue
+
+                try:
+                    self._turn_done_event.clear()
+                    await self.session.send_client_content(
+                        turns={"role": "user", "parts": [{"text": message}]},
+                        turn_complete=True,
+                    )
+                    # Wait for the assistant's announcement to finish before
+                    # allowing another queued task to enter the conversation.
+                    await asyncio.wait_for(self._turn_done_event.wait(), timeout=150.0)
+                    deadline = time.monotonic() + 45.0
+                    while time.monotonic() < deadline:
+                        with self._speaking_lock:
+                            still_speaking = self._is_speaking
+                        queued_audio = bool(self.audio_in_queue and not self.audio_in_queue.empty())
+                        if not still_speaking and not queued_audio and not self._tail_active():
+                            break
+                        await asyncio.sleep(0.2)
+                    with self._background_task_lock:
+                        live_record = self._background_task_records.get(task_id)
+                        if live_record:
+                            live_record["notification_status"] = "delivered"
+                            work_journal.save_task(live_record)
+                    print(f"[Notifications] Announced background task {task_id}.")
+                except asyncio.CancelledError:
+                    with self._background_task_lock:
+                        live_record = self._background_task_records.get(task_id)
+                        if live_record:
+                            live_record["notification_status"] = "pending"
+                            work_journal.save_task(live_record)
+                    raise
+                except Exception as exc:
+                    print(f"[Notifications] Delivery deferred for {task_id}: {exc}")
+                    with self._background_task_lock:
+                        live_record = self._background_task_records.get(task_id)
+                        if live_record:
+                            live_record["notification_status"] = "pending"
+                            work_journal.save_task(live_record)
+                    await asyncio.sleep(2.0)
 
     def plugin_say(self, instruction: str) -> None:
         """
@@ -1188,6 +1252,9 @@ class JarvisLive:
         if self._wake_enabled and not self._awake:
             self.ui.write_log("SYS: I'm asleep — say 'Hey Jarvis' or tap WAKE NOW first.")
             return
+        self._last_user_speech = time.monotonic()
+        if self._turn_done_event:
+            self._turn_done_event.clear()
         asyncio.run_coroutine_threadsafe(
             self.session.send_client_content(
                 turns={"role": "user", "parts": [{"text": text}]},
@@ -1666,6 +1733,7 @@ class JarvisLive:
                     "result": "",
                     "started_at": datetime.now().isoformat(timespec="seconds"),
                     "finished_at": "",
+                    "notification_status": "not_required",
                 }
                 work_journal.save_task(self._background_task_records[task_id])
                 try:
@@ -2131,6 +2199,8 @@ class JarvisLive:
                             if txt:
                                 in_buf.append(txt)
                                 self._last_user_speech = time.monotonic()
+                                if self._turn_done_event:
+                                    self._turn_done_event.clear()
 
                         if sc.turn_complete:
                             if self._turn_done_event:
@@ -2991,6 +3061,14 @@ class JarvisLive:
                     tg.create_task(self._run_background_monitor())
                     tg.create_task(self._run_proactive_mode())
                     tg.create_task(self._run_sleep_watch())
+                    self._background_notification_event = asyncio.Event()
+                    # Re-arm notifications that were queued before a reconnect.
+                    if any(
+                        item.get("notification_status") in ("pending", "delivering")
+                        for item in self._background_task_records.values()
+                    ):
+                        self._background_notification_event.set()
+                    tg.create_task(self._run_background_notification_dispatcher())
                     if self._dashboard:
                         tg.create_task(self._relay_phone_audio())
 
