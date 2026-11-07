@@ -30,6 +30,7 @@ def _db():
     CREATE TABLE IF NOT EXISTS memory_embeddings(
       memory_id INTEGER PRIMARY KEY, model TEXT NOT NULL, vector BLOB NOT NULL,
       dimensions INTEGER NOT NULL, updated_at TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS cognitive_meta(key TEXT PRIMARY KEY,value TEXT NOT NULL);
     CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
       content,evidence,source,content='memories',content_rowid='id');
     CREATE TRIGGER IF NOT EXISTS memories_ai AFTER INSERT ON memories BEGIN
@@ -44,9 +45,10 @@ def _db():
       INSERT INTO memories_fts(rowid,content,evidence,source)
       VALUES(new.id,new.content,new.evidence,new.source); END;
     """)
-    conn.execute("""INSERT INTO memories_fts(rowid,content,evidence,source)
-      SELECT m.id,m.content,m.evidence,m.source FROM memories m
-      WHERE NOT EXISTS(SELECT 1 FROM memories_fts f WHERE f.rowid=m.id)""")
+    initialized = conn.execute("SELECT value FROM cognitive_meta WHERE key='fts_rebuilt'").fetchone()
+    if not initialized:
+        conn.execute("INSERT INTO memories_fts(memories_fts) VALUES('rebuild')")
+        conn.execute("INSERT INTO cognitive_meta(key,value) VALUES('fts_rebuilt','1')")
     return conn
 
 def initialize():
