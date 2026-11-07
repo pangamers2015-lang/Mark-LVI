@@ -2761,7 +2761,9 @@ class JarvisLive:
             GITHUB_POLL_SECONDS, process_remote_inbox, pending_live_speech,
             mark_live_speech_delivered,
         )
+        from memory.github_shared_sync import sync_shared_folder
         last_error = ""
+        last_sync_error = ""
         first_poll = True
         poll_delay = GITHUB_POLL_SECONDS
         rate_limit_backoff = GITHUB_POLL_SECONDS
@@ -2774,6 +2776,20 @@ class JarvisLive:
                 continue
             try:
                 result = await asyncio.to_thread(process_remote_inbox)
+                sync_result = await asyncio.to_thread(sync_shared_folder)
+                sync_errors = "; ".join(sync_result.get("errors", [])) if sync_result.get("errors") else ""
+                if sync_errors and sync_errors != last_sync_error:
+                    print(f"[YonSync] Shared-folder sync issue: {sync_errors}")
+                    self.ui.write_log("SYS: Sincronização bilateral aguardando configuração ou disponibilidade do GitHub.")
+                last_sync_error = sync_errors
+                if sync_result.get("uploaded") or sync_result.get("downloaded"):
+                    print(
+                        f"[YonSync] Shared folder: {sync_result.get('uploaded', 0)} enviado(s), "
+                        f"{sync_result.get('downloaded', 0)} recebido(s)."
+                    )
+                if sync_result.get("conflicts"):
+                    print("[YonSync] Conflitos preservados sem sobrescrever: " +
+                          ", ".join(sync_result["conflicts"][:10]))
                 error = "; ".join(result.get("errors", [])) if result.get("errors") else ""
                 if error:
                     if error != last_error:
