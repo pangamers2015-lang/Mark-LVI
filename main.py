@@ -619,6 +619,8 @@ class JarvisLive:
         self._shutdown_requested = threading.Event()
         self._shutdown_event = None
         self._audio_capture_lock = threading.RLock()
+        self._audio_capture_condition = threading.Condition(self._audio_capture_lock)
+        self._audio_callbacks_active = 0
         self._background_task_lock = threading.RLock()
         self._restart_when_idle = False
         self._background_task_records = {
@@ -1199,8 +1201,8 @@ class JarvisLive:
         """Turn hold-to-talk on or off. Returns the scope actually achieved."""
         from core.hotkey import PushToTalk
 
-        self._ptt_enabled = bool(enabled)
-        with self._audio_capture_lock:
+        with self._audio_capture_condition:
+            self._ptt_enabled = bool(enabled)
             self._ptt_held = False
         # The local STT pipeline must buffer the whole key-held utterance.
         # Its automatic silence detector is only for hands-free mode.
@@ -1243,8 +1245,12 @@ class JarvisLive:
 
     def _on_ptt(self, held: bool) -> None:
         """Chord pressed or released — may arrive on the hotkey thread."""
-        with self._audio_capture_lock:
+        with self._audio_capture_condition:
             self._ptt_held = held
+            if not held:
+                self._audio_capture_condition.wait_for(
+                    lambda: self._audio_callbacks_active == 0, timeout=1.0
+                )
         if held:
             # Holding the key is also a way to wake it, so push-to-talk works
             # without having to say the wake word first.
@@ -1830,6 +1836,20 @@ class JarvisLive:
         loop = asyncio.get_event_loop()
 
         def callback(indata, frames, time_info, status):
+            # Count callbacks that began while PTT was held. Releasing the key
+            # waits for them to enqueue their final PCM frames before flushing.
+            with self._audio_capture_condition:
+                if self._ptt_enabled and not self._ptt_held:
+                    return
+                self._audio_callbacks_active += 1
+            try:
+                self._process_audio_callback(indata, frames, time_info, status)
+            finally:
+                with self._audio_capture_condition:
+                    self._audio_callbacks_active = max(0, self._audio_callbacks_active - 1)
+                    self._audio_capture_condition.notify_all()
+
+        def _process_audio_callback(indata, frames, time_info, status):
             # ── Wake-word gate ───────────────────────────────────────────────
             # While asleep, the mic audio NEVER goes to Gemini (nothing is
             # streamed, so JARVIS can't respond to speech not addressed to it and
@@ -1886,22 +1906,16 @@ class JarvisLive:
             # When it is on the microphone is closed by default and the chord
             # opens it, which is the whole point: nothing leaves the machine
             # unless you are holding the key.
-            # Synchronise capture with PTT release. The release callback waits
-            # for this lock before queuing the final flush barrier, so no final
-            # microphone frames can arrive behind the transcription request.
-            with self._audio_capture_lock:
-                if self._ptt_enabled and not self._ptt_held:
-                    return
-                if not self.ui.muted and not self._phone_active:
-                    data = indata.tobytes()
-                    loop.call_soon_threadsafe(
-                        self.out_queue.put_nowait,
-                        {"data": data, "mime_type": "audio/pcm"}
-                    )
-                    try:
-                        self.ui.set_audio_level(_pcm_level(indata))
-                    except Exception:
-                        pass
+            if not self.ui.muted and not self._phone_active:
+                data = indata.tobytes()
+                loop.call_soon_threadsafe(
+                    self.out_queue.put_nowait,
+                    {"data": data, "mime_type": "audio/pcm"}
+                )
+                try:
+                    self.ui.set_audio_level(_pcm_level(indata))
+                except Exception:
+                    pass
 
         try:
             def _open_mic(dev):
