@@ -618,6 +618,7 @@ class JarvisLive:
         self._loop                     = None
         self._shutdown_requested = threading.Event()
         self._shutdown_event = None
+        self._audio_capture_lock = threading.RLock()
         self._background_task_lock = threading.RLock()
         self._restart_when_idle = False
         self._background_task_records = {
@@ -1199,7 +1200,12 @@ class JarvisLive:
         from core.hotkey import PushToTalk
 
         self._ptt_enabled = bool(enabled)
-        self._ptt_held = False
+        with self._audio_capture_lock:
+            self._ptt_held = False
+        # The local STT pipeline must buffer the whole key-held utterance.
+        # Its automatic silence detector is only for hands-free mode.
+        if self._engine is not None and hasattr(self._engine, "auto_turn"):
+            self._engine.auto_turn = not self._ptt_enabled
         if not enabled:
             if self._ptt is not None:
                 self._ptt.stop()
@@ -1221,9 +1227,24 @@ class JarvisLive:
             pass
         return scope
 
+    async def _flush_pipeline_after_audio(self) -> None:
+        """Wait for every captured PCM frame to reach STT before flushing it."""
+        queue = self.out_queue
+        if queue is not None:
+            await queue.join()
+        engine = self._engine
+        if engine is not None and hasattr(engine, "flush_microphone"):
+            text = await engine.flush_microphone(SEND_SAMPLE_RATE)
+            if not text:
+                self.ui.write_log(
+                    "WARN: Nenhuma fala foi transcrita neste pressionamento. "
+                    "Confira o microfone e o provedor de reconhecimento."
+                )
+
     def _on_ptt(self, held: bool) -> None:
         """Chord pressed or released — may arrive on the hotkey thread."""
-        self._ptt_held = held
+        with self._audio_capture_lock:
+            self._ptt_held = held
         if held:
             # Holding the key is also a way to wake it, so push-to-talk works
             # without having to say the wake word first.
@@ -1238,7 +1259,7 @@ class JarvisLive:
         if not held and self._engine is not None and self._loop is not None:
             try:
                 asyncio.run_coroutine_threadsafe(
-                    self._engine.flush_microphone(SEND_SAMPLE_RATE), self._loop)
+                    self._flush_pipeline_after_audio(), self._loop)
             except Exception as e:
                 print(f"[JARVIS] PTT flush failed: {e}")
         try:
@@ -1794,12 +1815,15 @@ class JarvisLive:
             # mic / phone PCM through the new `audio` field instead. Queue items
             # are {"data": <bytes>, "mime_type": <str>} from _listen_audio and
             # the phone relay.
-            await self.session.send_realtime_input(
-                audio=types.Blob(
-                    data=msg["data"],
-                    mime_type=msg.get("mime_type", "audio/pcm"),
+            try:
+                await self.session.send_realtime_input(
+                    audio=types.Blob(
+                        data=msg["data"],
+                        mime_type=msg.get("mime_type", "audio/pcm"),
+                    )
                 )
-            )
+            finally:
+                self.out_queue.task_done()
 
     async def _listen_audio(self):
         print("[JARVIS] 🎤 Mic started")
@@ -1862,22 +1886,22 @@ class JarvisLive:
             # When it is on the microphone is closed by default and the chord
             # opens it, which is the whole point: nothing leaves the machine
             # unless you are holding the key.
-            if self._ptt_enabled and not self._ptt_held:
-                return
-            
-            if not self.ui.muted and not self._phone_active:
-                data = indata.tobytes()
-                loop.call_soon_threadsafe(
-                    self.out_queue.put_nowait,
-                    {"data": data, "mime_type": "audio/pcm"}
-                )
-                # Feed the live mic level to the HUD so the waveform reacts to
-                # the user's actual voice while listening. Purely cosmetic — any
-                # failure here must never disturb the mic.
-                try:
-                    self.ui.set_audio_level(_pcm_level(indata))
-                except Exception:
-                    pass
+            # Synchronise capture with PTT release. The release callback waits
+            # for this lock before queuing the final flush barrier, so no final
+            # microphone frames can arrive behind the transcription request.
+            with self._audio_capture_lock:
+                if self._ptt_enabled and not self._ptt_held:
+                    return
+                if not self.ui.muted and not self._phone_active:
+                    data = indata.tobytes()
+                    loop.call_soon_threadsafe(
+                        self.out_queue.put_nowait,
+                        {"data": data, "mime_type": "audio/pcm"}
+                    )
+                    try:
+                        self.ui.set_audio_level(_pcm_level(indata))
+                    except Exception:
+                        pass
 
         try:
             def _open_mic(dev):
