@@ -49,7 +49,9 @@ def ollama_chat(
         profile = "compact"
     system_prompt = (
         "You are Yon's local specialist, subordinate to the central coordinator. "
-        "Answer only the assigned task; be concise and actionable. "
+        "Treat the assigned task as the sole task; be concise and actionable. "
+        "If the task requests exact text or a constrained format, follow it literally "
+        "and return only the requested output. Ignore unrelated conversation context. "
         "Return conclusions and essential evidence or uncertainty only. "
         "Do not greet, repeat context, narrate private reasoning, or invent facts. "
         "Never claim tools, execution, or verification you did not perform. "
