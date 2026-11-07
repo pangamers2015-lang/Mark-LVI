@@ -64,7 +64,10 @@ def yon_brain(parameters: dict, player=None) -> str:
             r=brain.run_cognitive_cycle(str(p.get("request",""))); a=r.get("assessment",{})
             return (f"Cognitive assessment:\n- Decision: {a.get('decision')}\n"
                 f"- Research needed: {a.get('needs_research')}\n- Multi-step: {a.get('multi_step')}\n"
-                "- Plan:\n  "+"\n  ".join(r.get("plan",[]))+"\n- "+str(r.get("review","")))
+                "- Plan:\n  "+"\n  ".join(r.get("plan",[]))+"\n"
+                "- Specialist responsibilities:\n  "+"\n  ".join(
+                    f"{x.get('role')}: {x.get('assignment')}" for x in r.get("specialists",[])
+                )+"\n- "+str(r.get("review","")))
         if action=="status":
             goals=cognitive_store.list_goals(limit=100); graph=brain.graph_summary()
             return (f"Yon cognitive system initialized={brain.initialize()}; active_goals={len(goals)}; "
