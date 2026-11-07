@@ -22,7 +22,9 @@ memory systems must remain intact. This work extends rather than replaces them.
 - yon_brain action exposing memory, validation, goals, checkpoints, relationships and reflection.
 - Voice-session context bridges continuity, explicit lessons and cognitive state.
 - User request observer stores explicit learning cues and working task intent.
-- Background task completion writes an evidence-bearing checkpoint.
+- Background task start, completion and interrupted recovery write evidence-bearing checkpoints.
+- Objective lifecycle updates, cycle-safe prerequisite dependencies and evidence-gated memory consolidation.
+- Isolated unittest regression suite added under tests/test_cognitive_runtime.py (not yet executed).
 - Optional framework list in requirements-cognitive.txt.
 
 ## Still requires local validation
