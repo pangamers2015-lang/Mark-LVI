@@ -935,6 +935,7 @@ class JarvisLive:
 
         # Return background web searches to Gemini automatically; previously
         # the result was only stored in the HUD and task journal.
+        search_delivered = False
         if name == "web_search":
             search_query = args.get("query") or ", ".join(args.get("items", []))
             search_mode = args.get("mode", "search")
@@ -960,6 +961,7 @@ class JarvisLive:
                         turns={"role": "user", "parts": [{"text": delivery}]},
                         turn_complete=True,
                     )
+                    search_delivered = True
                     print(f"[WebSearch] Delivered completed result to the live conversation: {search_query[:100]}")
                 else:
                     self.ui.write_log(
@@ -977,7 +979,8 @@ class JarvisLive:
         self.ui.write_log(
             f"SYS: Background task {task_id} ({name}) {status}."
             + (" Search result delivered to the conversation."
-               if name == "web_search" else " Ask me for its result when you are ready.")
+               if search_delivered else
+               " Ask me for its result when you are ready.")
         )
         print(f"[JARVIS] Background task {task_id} {status}: {result[:160]}")
 
