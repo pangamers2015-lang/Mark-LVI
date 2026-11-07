@@ -7,8 +7,7 @@
 # fresh clone on the day it ships. Minor and patch updates flow in freely.
 
 # ── Core: UI, audio, Gemini Live ──────────────────────────────────────────────
-# Desktop web interface (Edge WebView2 on Windows; installed separately from Qt).
-pywebview>=5.3,<7
+# The HTML interface is served by Python's standard-library HTTP server; no desktop webview is needed.
 # PyQt6 and numpy also carry the holographic avatar: the head is rendered in
 # software with QPainter and posed with numpy, so the face costs no extra
 # package, no OpenGL and no GPU. Nothing below was added for it.
