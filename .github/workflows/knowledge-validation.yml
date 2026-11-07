@@ -23,8 +23,10 @@ on:
       - "knowledge/inbox/**"
       - "memory/knowledge_updates.py"
       - "memory/github_inbox.py"
+      - "memory/github_shared_sync.py"
       - "tests/test_knowledge_updates.py"
       - "tests/test_github_inbox.py"
+      - "tests/test_github_shared_sync.py"
       - ".github/workflows/knowledge-validation.yml"
 permissions:
   contents: read
