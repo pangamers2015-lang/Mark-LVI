@@ -107,6 +107,8 @@ class LiveVoice:
         self._loop = asyncio.get_running_loop()
         self._mic_queue = asyncio.Queue(maxsize=100)
         self._stop_event = asyncio.Event()
+        if self._stop.is_set():
+            self._stop_event.set()
         client = genai.Client(api_key=self.api_key, http_options={"api_version": "v1beta"})
         config = {
             "response_modalities": ["AUDIO"],
