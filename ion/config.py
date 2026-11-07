@@ -67,7 +67,7 @@ def api_key(provider: str) -> str:
 
 def model(provider: str) -> str:
     defaults = {
-        "gemini": "gemini-2.5-flash",
+        "gemini": "gemini-3.8-flash",
         "nvidia": "nvidia/nemotron-3-ultra-550b-a55b",
     }
     key = "GEMINI_MODEL" if provider == "gemini" else "NVIDIA_MODEL"
