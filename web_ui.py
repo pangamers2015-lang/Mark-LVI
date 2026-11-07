@@ -343,24 +343,53 @@ class JarvisUI:
             return "YON"
 
     def _run_window(self):
-        self._server = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
+        """Serve the HTML UI on localhost and open it in the user's normal browser.
+
+        The Python process remains the backend. Audio capture stays in the
+        existing sounddevice/Gemini pipeline; the browser sends push-to-talk
+        press/release events to /api/ptt instead of opening a second mic stream.
+        """
+        try:
+            self._server = ThreadingHTTPServer(("127.0.0.1", 8790), _Handler)
+        except OSError:
+            # Another Yon instance may already own the default port. Use an
+            # ephemeral localhost port rather than failing or binding publicly.
+            self._server = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
         self._server.ui = self
         self._server.daemon_threads = True
         port = self._server.server_address[1]
-        self._server_thread = threading.Thread(target=self._server.serve_forever, daemon=True, name="Yon-Web-Server")
-        self._server_thread.start()
         url = f"http://127.0.0.1:{port}/"
+        print(f"[YON] Interface web disponível em {url}", flush=True)
+
         try:
-            import webview
-        except ImportError as exc:
-            raise RuntimeError("A interface web precisa do pywebview. Execute: pip install pywebview") from exc
-        self._window = webview.create_window("Yon", url, width=1280, height=800, min_size=(900, 560), background_color="#000000")
-        webview.start(gui="edgechromium", debug=False)
-        try:
-            self._server.shutdown()
+            self._server.serve_forever(poll_interval=0.5)
+        except KeyboardInterrupt:
+            print("\\n[YON] Encerrando servidor...", flush=True)
+        finally:
             self._server.server_close()
-        except Exception:
-            pass
+
+    def open_browser(self):
+        """Start the local HTTP server before opening the default browser."""
+        starter = threading.Thread(
+            target=self._run_window, daemon=True, name="Yon-Web-Server"
+        )
+        starter.start()
+        # Wait until the HTTP server has bound its port before launching a tab.
+        deadline = time.monotonic() + 10.0
+        while self._server is None and starter.is_alive() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        if self._server is None:
+            raise RuntimeError("Não foi possível iniciar o servidor local do Yon.")
+        url = f"http://127.0.0.1:{self._server.server_address[1]}/"
+        try:
+            opened = webbrowser.open_new_tab(url)
+            if not opened:
+                print(f"[YON] Abra manualmente: {url}", flush=True)
+        except Exception as exc:
+            print(f"[YON] Abra manualmente {url} ({exc})", flush=True)
+        # Keep the main thread alive while the server worker serves requests.
+        while starter.is_alive():
+            starter.join(timeout=0.5)
 
     def wait_for_api_key(self):
         while not self._win._ready:
