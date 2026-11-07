@@ -583,23 +583,29 @@
   }, 5000);
 
   // Legenda sincronizada com a transcrição de saída do Yon.
-  let legendaTimer = null;
+  // O texto permanece na conversa após a fala; só um novo turno o substitui.
   let legendaAtiva = false;
+  function iniciarLegenda() {
+    const area = el("resposta");
+    if (!area) return;
+    area.textContent = "";
+    legendaAtiva = true;
+  }
   function atualizarLegenda(trecho) {
     const area = el("resposta");
     if (!area || !trecho) return;
-    clearTimeout(legendaTimer);
-    if (!legendaAtiva) area.textContent = "";
-    legendaAtiva = true;
+    if (!legendaAtiva) iniciarLegenda();
     area.textContent += (area.textContent ? " " : "") + trecho;
   }
+  function restaurarLegenda(texto) {
+    const area = el("resposta");
+    if (!area) return;
+    area.textContent = texto || "";
+    legendaAtiva = false;
+  }
   function finalizarLegenda() {
-    if (!legendaAtiva) return;
-    clearTimeout(legendaTimer);
-    legendaTimer = setTimeout(() => {
-      el("resposta").textContent = "";
-      legendaAtiva = false;
-    }, 4500);
+    // Do not erase the answer: it is the visible conversation history.
+    legendaAtiva = false;
   }
 
   // ---------------------------------------------------------- tela
@@ -612,6 +618,7 @@
     el("ferramentas").innerHTML = "";
     el("voce").textContent = "";
     el("resposta").textContent = "";
+    legendaAtiva = false;
     el("tempo").textContent = "";
     el("aviso").textContent = "";
   }
@@ -647,6 +654,10 @@
         el("voce").textContent = "“" + e.texto + "”";
       } else if (e.tipo === "ferramenta") {
         chip(e.rotulo);
+      } else if (e.tipo === "legenda_inicio") {
+        iniciarLegenda();
+      } else if (e.tipo === "legenda_snapshot") {
+        restaurarLegenda(e.texto || "");
       } else if (e.tipo === "legenda") {
         atualizarLegenda(e.texto || "");
       } else if (e.tipo === "legenda_fim") {
