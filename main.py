@@ -958,7 +958,7 @@ class JarvisLive:
         if failed_tool == "capability_recovery":
             return None
         try:
-            from actions.capability_recovery import is_capability_failure
+            from actions.capability_recovery import _safe_failure, is_capability_failure
             if not is_capability_failure(failed_tool, args, failure_result):
                 return None
             if not self._action_registry.has("capability_recovery"):
@@ -970,6 +970,7 @@ class JarvisLive:
                 args.get("task") or args.get("query") or args.get("path")
                 or args.get("folder") or args.get("file_path") or failed_tool
             )[:180]
+            safe_summary = _safe_failure(safe_summary)
             fingerprint = _hashlib.sha256(
                 (str(failed_tool) + "|" + safe_summary + "|" + str(failure_result)[:500]).encode("utf-8", "replace")
             ).hexdigest()
