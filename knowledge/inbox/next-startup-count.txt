@@ -1,0 +1,1 @@
+Na próxima vez que o aplicativo Yon iniciar, faça uma saudação ao usuário e conte em voz alta de 1 até 5, em português. Esta é uma instrução de execução única para a próxima inicialização, não uma preferência permanente.

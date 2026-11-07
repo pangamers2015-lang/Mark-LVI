@@ -1,0 +1,4 @@
+# Optional cognitive subsystem dependencies. Core memory and FTS5 use Python stdlib.
+langgraph>=0.2,<2
+networkx>=3.2,<4
+sentence-transformers>=3.0,<6

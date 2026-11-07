@@ -1,0 +1,46 @@
+name: Yon knowledge validation
+on:
+  push:
+    branches: [main, feature/behavioral-preferences, feature/continuous-knowledge-inbox, feature/bidirectional-knowledge-sync, feature/visual-task-panel-clean-chat]
+    paths:
+      - "knowledge/updates/**"
+      - "knowledge/inbox/**"
+      - "docs/YON_GITHUB_KNOWLEDGE_UPDATES.md"
+      - "memory/knowledge_updates.py"
+      - "memory/github_inbox.py"
+      - "memory/github_shared_sync.py"
+      - "memory/cognitive_runtime.py"
+      - "actions/knowledge_update.py"
+      - "core/prompt.txt"
+      - "main.py"
+      - "web/index.html"
+      - "tests/test_knowledge_updates.py"
+      - "tests/test_github_inbox.py"
+      - "tests/test_github_shared_sync.py"
+      - ".github/workflows/knowledge-validation.yml"
+  pull_request:
+    paths:
+      - "main.py"
+      - "web/index.html"
+      - "knowledge/updates/**"
+      - "knowledge/inbox/**"
+      - "memory/knowledge_updates.py"
+      - "memory/github_inbox.py"
+      - "memory/github_shared_sync.py"
+      - "tests/test_knowledge_updates.py"
+      - "tests/test_github_inbox.py"
+      - "tests/test_github_shared_sync.py"
+      - ".github/workflows/knowledge-validation.yml"
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --upgrade pip pytest
+      - run: python -m compileall -q main.py core/echo.py core/barge_in.py memory/github_inbox.py memory/github_shared_sync.py memory/cognitive_runtime.py
+      - run: python -m pytest tests/test_github_inbox.py tests/test_github_shared_sync.py tests/test_knowledge_updates.py tests/test_cognitive_runtime.py tests/test_voice_barge_in.py -q
