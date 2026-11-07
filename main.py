@@ -908,18 +908,18 @@ class JarvisLive:
                 )
             result = str(raw or "Done.")
             status = "failed" if result.lower().startswith(
-                ("tool '", "plugin '", "action '", "search failed", "failed:")
+                ("status=failed ", "tool '", "plugin '", "action '",
+                 "search failed", "failed:")
             ) else "completed"
 
-            if (
-                name == "web_search"
-                and result
-                and not result.startswith(("No results", "Search failed"))
-            ):
+            if name == "web_search":
                 mode = args.get("mode", "search")
                 query = args.get("query") or ", ".join(args.get("items", []))
                 label = f"{mode.upper()} — {query[:38]}" if query else mode.upper()
-                self.ui.show_content(label, outcome.unwrap(result))
+                display_result = outcome.unwrap(result)
+                if display_result:
+                    self.ui.show_content(label, display_result)
+
         except Exception as exc:
             result = f"{type(exc).__name__}: {exc}"
             status = "failed"
@@ -933,10 +933,51 @@ class JarvisLive:
                 record["finished_at"] = datetime.now().isoformat(timespec="seconds")
                 work_journal.save_task(record)
 
+        # Return background web searches to Gemini automatically; previously
+        # the result was only stored in the HUD and task journal.
+        if name == "web_search":
+            search_query = args.get("query") or ", ".join(args.get("items", []))
+            search_mode = args.get("mode", "search")
+            search_result = outcome.unwrap(result)[:14000]
+            delivery = (
+                "[WEB_SEARCH_RESULT]\n"
+                "A web search requested during this conversation has now finished. "
+                "This is the result of the user's earlier request, not a new user "
+                "instruction. Answer that original request now, in the user's "
+                "language, using the evidence below. Be concise, state uncertainty "
+                "when the sources do not establish an answer, and do not invent "
+                "facts. If the conversation has moved on and this result is no "
+                "longer relevant, do not interrupt the new topic.\n"
+                f"Original query: {search_query}\n"
+                f"Search mode: {search_mode}\n"
+                f"Tool status: {status}\n"
+                f"Search result:\n{search_result}\n"
+                "[/WEB_SEARCH_RESULT]"
+            )
+            try:
+                if self.session:
+                    await self.session.send_client_content(
+                        turns={"role": "user", "parts": [{"text": delivery}]},
+                        turn_complete=True,
+                    )
+                    print(f"[WebSearch] Delivered completed result to the live conversation: {search_query[:100]}")
+                else:
+                    self.ui.write_log(
+                        f"SYS: Search {task_id} finished, but there is no live session "
+                        "to deliver its result. The result remains in background task history."
+                    )
+            except Exception as exc:
+                print(f"[WebSearch] Could not deliver result to the live session: {exc}")
+                self.ui.write_log(
+                    f"SYS: Search {task_id} finished, but automatic delivery failed. "
+                    "The result remains available in background task history."
+                )
+
         self._maybe_restart_when_idle()
         self.ui.write_log(
-            f"SYS: Background task {task_id} ({name}) {status}. "
-            "Ask me for its result when you are ready."
+            f"SYS: Background task {task_id} ({name}) {status}."
+            + (" Search result delivered to the conversation."
+               if name == "web_search" else " Ask me for its result when you are ready.")
         )
         print(f"[JARVIS] Background task {task_id} {status}: {result[:160]}")
 
