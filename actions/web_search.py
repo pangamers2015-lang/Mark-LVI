@@ -330,9 +330,11 @@ def _weather(query: str) -> str:
     ).strip(" ,.-")
     if not place:
         raise ValueError("Informe a cidade para consultar a previsão do tempo.")
+    place = re.sub(r"(?i)^(?:cidade\s+de|city\s+of)\s+", "", place)
     parts = [part.strip() for part in place.split(",") if part.strip()]
     city = parts[0] if parts else place
     state_hint = parts[1].lower() if len(parts) > 1 else ""
+    state_hint = {"sc": "santa catarina"}.get(state_hint, state_hint)
     country_hint = "BR" if any(
         term in place.lower() for term in ("brasil", "brazil", "sc", "santa catarina")
     ) else None
