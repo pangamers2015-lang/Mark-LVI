@@ -145,6 +145,24 @@ def _create_workspace(proposal_id: int, title: str, plan: str, test_plan: str) -
     return target
 
 
+def active_proposal_for_topic(topic: str) -> str:
+    """Return an existing non-rejected proposal so repeated failures do not re-research it."""
+    topic_key = _key(topic)
+    if not topic_key:
+        return ""
+    try:
+        with _LOCK, closing(_connect()) as conn:
+            row = conn.execute(
+                "SELECT id FROM capability_proposals WHERE topic_key=? "
+                "AND status IN ('pending_approval','sandbox_approved','sandbox_passed','integration_approved') "
+                "ORDER BY id DESC LIMIT 1",
+                (topic_key,),
+            ).fetchone()
+            return _format_proposal(_proposal(conn, row[0])) if row else ""
+    except sqlite3.Error:
+        return ""
+
+
 def capability_development(parameters: dict, player=None) -> str:
     p = parameters or {}
     action = str(p.get("action") or "list").strip().lower()
@@ -158,6 +176,17 @@ def capability_development(parameters: dict, player=None) -> str:
                 if not title or not topic or not limitation or not approach:
                     return "A proposal requires title, topic, limitation and a concrete proposed approach."
                 topic_key, approach_key = _key(topic), _key(approach)
+                existing = conn.execute(
+                    "SELECT id FROM capability_proposals WHERE topic_key=? AND approach=? "
+                    "AND status IN ('pending_approval','sandbox_approved','sandbox_passed','integration_approved') "
+                    "ORDER BY id DESC LIMIT 1",
+                    (topic_key, approach),
+                ).fetchone()
+                if existing:
+                    return (
+                        "An equivalent capability proposal is already active. Do not create a duplicate.\n"
+                        + _format_proposal(_proposal(conn, existing[0]))
+                    )
                 blocked = conn.execute(
                     "SELECT reason FROM capability_rejection_filters "
                     "WHERE topic_key=? AND rejected_approach_key=?",
