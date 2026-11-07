@@ -2088,6 +2088,8 @@ class JarvisLive:
                                 # alone cannot show. Pure string work — it adds
                                 # nothing measurable to the response path.
                                 self._visemes.feed_text(txt)
+                                if hasattr(self.ui, "show_speech_caption"):
+                                    self.ui.show_speech_caption(txt)
 
                         if sc.input_transcription and sc.input_transcription.text:
                             txt = _clean_transcript(sc.input_transcription.text)
@@ -2142,6 +2144,8 @@ class JarvisLive:
                                     }))
                             in_buf = []
 
+                            if out_buf and hasattr(self.ui, "finish_speech_caption"):
+                                self.ui.finish_speech_caption()
                             full_out = " ".join(out_buf).strip()
                             # Second line of defence: even if a repeat slips
                             # into a *fresh* buffer after a flush, never log the
