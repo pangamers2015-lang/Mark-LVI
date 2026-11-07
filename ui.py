@@ -898,7 +898,7 @@ class HudCanvas(QWidget):
         if not p.isActive():      # device not ready (e.g. 0-size during layout) — skip cleanly
             return
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        p.fillRect(self.rect(), qcol(C.BG))
+        p.fillRect(self.rect(), QColor("#000000") if self.hud_style == "orb" else qcol(C.BG))
 
         W, H = self.width(), self.height()
         cx, cy = W / 2, H / 2
@@ -972,6 +972,8 @@ class HudCanvas(QWidget):
             sym = "●" if self._blink else "○"
             txt, col = f"{sym}  {self.state}", qcol(C.PRI)
 
+        if self.hud_style == "orb":
+            col = QColor("#ffffff")
         p.setPen(QPen(col, 1))
         p.setFont(QFont("Courier New", 11, QFont.Weight.Bold))
         p.drawText(QRectF(0, sy, W, 26), Qt.AlignmentFlag.AlignCenter, txt)
@@ -993,9 +995,10 @@ class HudCanvas(QWidget):
                 idle    = 3.0 + 2.0 * math.sin(self._tick * 0.09 + i * 0.6)
                 hgt     = int(max(2, min(24, idle + amp * 22.0 * env * shimmer)))
                 if amp > 0.05:
-                    cl = qcol(C.PRI) if hgt > 12 else qcol(C.PRI_DIM)
+                    cl = (QColor("#ffffff") if self.hud_style == "orb" else
+                          (qcol(C.PRI) if hgt > 12 else qcol(C.PRI_DIM)))
                 else:
-                    cl = qcol(C.BORDER_B)
+                    cl = QColor(255, 255, 255, 105) if self.hud_style == "orb" else qcol(C.BORDER_B)
             p.fillRect(QRectF(wx0 + i * bw, wy + 20 - hgt, bw - 1, hgt), cl)
 
         p.end()   # end deterministically so the backing store never flushes an active painter
