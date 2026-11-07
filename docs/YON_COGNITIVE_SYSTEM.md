@@ -14,6 +14,8 @@
   active model and existing action registry.
 - Optional second-brain bridge: the active coordinator can consult a local Ollama model and
   critically review its independent response; it never assumes Ollama is running.
+- Knowledge association engine: each newly recorded memory is conservatively compared with prior memories; tentative lexical or already-available embedding matches create provenance-labelled `possible_related_to` edges. These are suggestions, not confirmed facts.
+- Automatic Obsidian synchronization: when `YON_OBSIDIAN_VAULT` is configured, memory/relationship/validation changes refresh generated memory notes, per-memory backlinks, a graph index and objectives. Obsidian Graph View can visualize the generated Markdown wikilinks.
 - Optional Obsidian bridge exports generated Markdown views for memories and objectives.
   The SQLite databases remain authoritative; Obsidian is never required at runtime.
 - Agent interface: active model can call yon_brain to search/store memories, validate evidence,
@@ -38,8 +40,10 @@ Optional packages are listed in requirements-cognitive.txt:
 - Ollama: separate local application, not a Python package; optional second-model consultation
   uses its local HTTP API. Configure YON_LOCAL_MODEL with an installed model name and optionally
   YON_OLLAMA_URL if Ollama is not listening on its default local endpoint.
-- Obsidian export: set YON_OBSIDIAN_VAULT to the vault's full filesystem path. Yon writes
-  generated notes under the vault's Yon/Generated folder and does not read Obsidian internals.
+- Obsidian export and auto-sync: set YON_OBSIDIAN_VAULT to the vault's full filesystem path. Yon writes
+  generated memory notes, graph index, backlinks and objectives under the vault's Yon/Generated folder.
+  Open Obsidian Graph View and include the Yon/Generated folder to see the connected knowledge graph.
+  Yon does not read Obsidian internals; SQLite remains authoritative.
 
 Install from the project root with: pip install -r requirements-cognitive.txt
 Sentence Transformers installs PyTorch and can use substantial disk and RAM. It is

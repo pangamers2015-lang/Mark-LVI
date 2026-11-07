@@ -206,6 +206,21 @@ def search_memories(query: str = "", limit: int = 8) -> list[dict[str, Any]]:
         return []
 
 
+def list_memories(limit: int = 500) -> list[dict[str, Any]]:
+    """Return recent memories for graph/export views without changing search ranking."""
+    try:
+        with _LOCK, closing(_connect()) as conn:
+            rows = conn.execute(
+                "SELECT id,level,content,source,state,evidence,created_at,validated_at "
+                "FROM memories ORDER BY id DESC LIMIT ?",
+                (max(1, min(int(limit), 2000)),),
+            ).fetchall()
+        keys = ("id", "level", "content", "source", "state", "evidence", "created_at", "validated_at")
+        return [dict(zip(keys, row)) for row in rows]
+    except (sqlite3.Error, TypeError, ValueError) as exc:
+        print(f"[CognitiveMemory] Memory listing failed: {exc}")
+        return []
+
 def save_goal(
     title: str,
     description: str = "",

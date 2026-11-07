@@ -1,6 +1,8 @@
 """Isolated tests for the Yon cognitive runtime; never touch the user's real databases."""
+import os
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from memory import cognitive_store
@@ -9,6 +11,8 @@ from memory import cognitive_runtime
 
 class CognitiveRuntimeTests(unittest.TestCase):
     def setUp(self):
+        self.env_patch = patch.dict(os.environ, {"YON_OBSIDIAN_VAULT": ""})
+        self.env_patch.start()
         self.temp = tempfile.TemporaryDirectory()
         root = Path(self.temp.name)
         self.old_store_path = cognitive_store.DB_PATH
@@ -25,6 +29,7 @@ class CognitiveRuntimeTests(unittest.TestCase):
         cognitive_runtime._EMBEDDER = None
         cognitive_runtime._EMBEDDER_ERROR = ""
         self.temp.cleanup()
+        self.env_patch.stop()
 
     def test_memory_provenance_and_fts_retrieval(self):
         memory_id = cognitive_runtime.remember(
@@ -64,6 +69,48 @@ class CognitiveRuntimeTests(unittest.TestCase):
         self.assertTrue(result["assessment"]["multi_step"])
         self.assertTrue(result["plan"])
         self.assertIn("not been verified", result["review"])
+
+    def test_new_memories_get_conservative_automatic_graph_links(self):
+        first = cognitive_runtime.remember(
+            "DuckDuckGo pesquisa páginas da internet e retorna fontes para pesquisa.",
+            source="unit_test", state="hypothesis"
+        )
+        second = cognitive_runtime.remember(
+            "Usar DuckDuckGo para pesquisar páginas da internet e encontrar fontes confiáveis.",
+            source="unit_test", state="hypothesis"
+        )
+        self.assertIsNotNone(first)
+        self.assertIsNotNone(second)
+        edges = cognitive_runtime.list_memory_relations()
+        self.assertTrue(any(
+            edge["source_id"] == second and edge["target_id"] == first
+            and edge["relation"] == "possible_related_to"
+            and "lexical" in edge["evidence"]
+            for edge in edges
+        ))
+
+    def test_obsidian_export_builds_linked_graph_notes(self):
+        from memory.obsidian_bridge import export_cognitive_notes
+        first = cognitive_runtime.remember(
+            "Pesquisa na internet encontra páginas e fontes confiáveis.",
+            source="unit_test", state="hypothesis"
+        )
+        second = cognitive_runtime.remember(
+            "Pesquisar páginas na internet e verificar fontes confiáveis.",
+            source="unit_test", state="hypothesis"
+        )
+        self.assertIsNotNone(first)
+        self.assertIsNotNone(second)
+        vault = Path(self.temp.name) / "vault"
+        vault.mkdir()
+        with patch.dict(os.environ, {"YON_OBSIDIAN_VAULT": str(vault)}):
+            result = export_cognitive_notes()
+        self.assertTrue(result["ok"], result)
+        graph_file = vault / "Yon" / "Generated" / "Memory Graph.generated.md"
+        note_file = vault / "Yon" / "Generated" / f"Memory {second}.generated.md"
+        self.assertTrue(graph_file.exists())
+        self.assertTrue(note_file.exists())
+        self.assertIn(f"[[Memory {first}.generated]]", note_file.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

@@ -70,19 +70,25 @@ def initialize():
         print(f"[YonBrain] Initialization failed: {exc}")
         return False
 
+
 def remember(content, level="semantic", source="user", state="hypothesis", evidence=""):
     if state == "confirmed" and not str(evidence or "").strip(): return None
     if not initialize(): return None
     memory_id = store.add_memory(content,level=level,source=source,state=state,evidence=evidence,
                                  validated=(state=="confirmed"))
-    if memory_id and _EMBEDDER is not None: index_memory(memory_id)
+    if memory_id:
+        if _EMBEDDER is not None: index_memory(memory_id)
+        discover_memory_relations(memory_id)
+        _sync_obsidian()
     return memory_id
 
 def validate_memory(memory_id,state,evidence):
     if state=="confirmed" and not str(evidence or "").strip(): return False
-    return store.set_memory_state(memory_id,state,evidence)
+    ok = store.set_memory_state(memory_id,state,evidence)
+    if ok: _sync_obsidian()
+    return ok
 
-def relate(source_id,target_id,relation,evidence=""):
+def relate(source_id,target_id,relation,evidence="",sync=True):
     relation=re.sub(r"[^a-zA-Z0-9_ -]","",str(relation or "")).strip()[:80]
     if not relation or source_id==target_id: return False
     try:
@@ -93,10 +99,97 @@ def relate(source_id,target_id,relation,evidence=""):
             conn.execute("""INSERT OR IGNORE INTO memory_relations
               (source_id,target_id,relation,evidence,created_at) VALUES(?,?,?,?,?)""",
               (int(source_id),int(target_id),relation,str(evidence)[:2000],_now()))
+        if sync: _sync_obsidian()
         return True
     except (sqlite3.Error,TypeError,ValueError) as exc:
         print(f"[YonBrain] Relation write failed: {exc}")
         return False
+
+_ASSOC_STOPWORDS = {
+    "a","o","as","os","um","uma","uns","umas","de","do","da","dos","das","e","ou",
+    "em","no","na","nos","nas","por","para","com","sem","que","como","quando","onde",
+    "ser","estar","ter","foi","são","sao","será","serao","isso","essa","esse","aquele",
+    "the","and","or","of","to","in","on","for","with","without","is","are","was","were",
+    "be","been","being","this","that","these","those","it","as","by","from","an"
+}
+
+def _association_tokens(value):
+    return {token for token in re.findall(r"[\wÀ-ÿ]{3,}", str(value or "").casefold())
+            if token not in _ASSOC_STOPWORDS and not token.isdigit()}
+
+def list_memory_relations(limit=3000):
+    try:
+        with _LOCK, closing(_db()) as conn:
+            rows=conn.execute("""SELECT source_id,target_id,relation,evidence,created_at
+                FROM memory_relations ORDER BY id DESC LIMIT ?""",
+                (max(1,min(int(limit),10000)),)).fetchall()
+        return [{"source_id":r[0],"target_id":r[1],"relation":r[2],
+                 "evidence":r[3],"created_at":r[4]} for r in rows]
+    except (sqlite3.Error,TypeError,ValueError):
+        return []
+
+def discover_memory_relations(memory_id, limit=3):
+    """Create conservative, explicitly tentative links to similar existing memories."""
+    try:
+        with _LOCK, closing(_db()) as conn:
+            current=conn.execute("SELECT content FROM memories WHERE id=?",(int(memory_id),)).fetchone()
+            if not current: return []
+            candidates=conn.execute("""SELECT id,content FROM memories
+                WHERE id<>? ORDER BY id DESC LIMIT 500""",(int(memory_id),)).fetchall()
+        tokens=_association_tokens(current[0])
+        if len(tokens)<2: return []
+        scored=[]
+        # Use embeddings only when already loaded; never trigger a model download at turn time.
+        if _EMBEDDER is not None:
+            try:
+                import numpy as np
+                index_memory(memory_id)
+                with _LOCK, closing(_db()) as conn:
+                    current_vec=conn.execute(
+                        "SELECT vector,dimensions FROM memory_embeddings WHERE memory_id=? AND model=?",
+                        (int(memory_id),_MODEL_NAME)).fetchone()
+                    vectors=conn.execute("""SELECT e.memory_id,e.vector,e.dimensions
+                        FROM memory_embeddings e WHERE e.model=? AND e.memory_id<>? LIMIT 500""",
+                        (_MODEL_NAME,int(memory_id))).fetchall()
+                if current_vec:
+                    q=np.frombuffer(current_vec[0],dtype="float32",count=current_vec[1])
+                    for row in vectors:
+                        v=np.frombuffer(row[1],dtype="float32",count=row[2])
+                        if len(v)==len(q):
+                            score=float(np.dot(q,v))
+                            if score>=0.62: scored.append((score,int(row[0]),"semantic"))
+            except Exception as exc:
+                print(f"[YonBrain] Semantic association unavailable; using lexical fallback: {exc}")
+        if not scored:
+            for candidate_id,candidate_text in candidates:
+                other=_association_tokens(candidate_text)
+                shared=tokens & other
+                if len(shared)<2: continue
+                score=len(shared)/max(1,len(tokens | other))
+                if score>=0.24: scored.append((score,int(candidate_id),"lexical"))
+        scored.sort(key=lambda item:item[0],reverse=True)
+        created=[]
+        for score,target_id,method in scored[:max(1,min(int(limit),5))]:
+            evidence=(f"Automatically suggested {method} association; score={score:.3f}. "
+                      "This is a related-topic link, not proof that the memories are equivalent.")
+            if relate(int(memory_id),target_id,"possible_related_to",evidence,sync=False):
+                created.append({"target_id":target_id,"score":round(score,3),"method":method})
+        return created
+    except (sqlite3.Error,TypeError,ValueError) as exc:
+        print(f"[YonBrain] Automatic memory association failed: {exc}")
+        return []
+
+def _sync_obsidian():
+    """Refresh generated Obsidian views when a vault has been configured."""
+    try:
+        import os
+        if not str(os.environ.get("YON_OBSIDIAN_VAULT","")).strip():
+            return {"ok":False,"skipped":True,"reason":"vault_not_configured"}
+        from memory.obsidian_bridge import export_cognitive_notes
+        return export_cognitive_notes()
+    except Exception as exc:
+        print(f"[YonBrain] Obsidian auto-sync failed: {exc}")
+        return {"ok":False,"error":str(exc)}
 
 def _embedder():
     global _EMBEDDER,_EMBEDDER_ERROR

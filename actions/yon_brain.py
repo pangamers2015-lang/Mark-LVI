@@ -59,7 +59,18 @@ def yon_brain(parameters: dict, player=None) -> str:
         if action=="relate":
             ok=brain.relate(int(p.get("source_id",0)),int(p.get("target_id",0)),
                 str(p.get("relation","related_to")),str(p.get("evidence","")))
-            return "Memory relationship saved." if ok else "Could not create that relationship."
+            return "Memory relationship saved and Obsidian graph synchronized." if ok else "Could not create that relationship."
+        if action=="graph_sync":
+            result=brain._sync_obsidian()
+            if result.get("ok"):
+                return (f"Obsidian knowledge graph synchronized: {result.get('memory_count',0)} memories, "
+                    f"{result.get('relationship_count',0)} links.")
+            return "Obsidian graph sync unavailable: "+str(result.get("error",result.get("reason","Unknown error")))
+        if action=="graph_status":
+            graph=brain.graph_summary()
+            return (f"Knowledge graph: {graph.get('nodes',0)} nodes, {graph.get('edges',0)} edges. "
+                    "Automatic associations are tentative related-topic suggestions; Obsidian auto-sync "
+                    "runs after memory/relationship changes when YON_OBSIDIAN_VAULT is configured.")
         if action=="reflect":
             r=brain.run_cognitive_cycle(str(p.get("request",""))); a=r.get("assessment",{})
             return (f"Cognitive assessment:\n- Decision: {a.get('decision')}\n"
@@ -101,7 +112,7 @@ def yon_brain(parameters: dict, player=None) -> str:
 
 TOOL={
 "name":"yon_brain",
-"description":("Manages Yon's persistent cognitive system: evidence-aware memories, retrieval, "
+"description":("Manages Yon's persistent cognitive system: evidence-aware memories, automatic tentative knowledge associations, retrieval, "
 "validation, objectives, checkpoints, knowledge relationships and metacognitive assessment. "
 "Use remember only for durable useful knowledge, not every utterance. Prefer hypothesis unless "
 "evidence justifies confirmed. Use checkpoint after meaningful progress and goal_add for multi-step "
@@ -109,10 +120,10 @@ TOOL={
 "optional semantic indexing, and consolidate only confirmed memories with evidence. Search before "
 "repeating known procedures. Use reflect to assess complex requests. Use consult_local to obtain an "
 "independent local-model opinion through Ollama when configured, then critically review its response. "
-"Use obsidian_export to generate Markdown views in a configured Obsidian vault; SQLite remains authoritative."),
+"New memories are conservatively checked for related-topic links. Use graph_status to inspect the knowledge graph, graph_sync to refresh Obsidian, and obsidian_export to generate Markdown views; SQLite remains authoritative."),
 "tier":"core","brief":"Stores and retrieves memories, validates evidence, and tracks objectives/checkpoints.",
 "parameters":{"type":"OBJECT","properties":{
-"action":{"type":"STRING","enum":["status","remember","search","validate","goal_add","goal_update","goal_list","checkpoint","depend","index","consolidate","relate","reflect","consult_local","obsidian_export"]},
+"action":{"type":"STRING","enum":["status","remember","search","validate","goal_add","goal_update","goal_list","checkpoint","depend","index","consolidate","relate","graph_sync","graph_status","reflect","consult_local","obsidian_export"]},
 "content":{"type":"STRING"},"level":{"type":"STRING","enum":["working","episodic","semantic","consolidated"]},
 "source":{"type":"STRING"},"state":{"type":"STRING","enum":["confirmed","hypothesis","stale","contested","planned","active","blocked","completed","cancelled","in_progress"]},"evidence":{"type":"STRING"},
 "query":{"type":"STRING"},"memory_id":{"type":"INTEGER"},"title":{"type":"STRING"},
