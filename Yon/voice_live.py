@@ -126,13 +126,13 @@ class LiveVoice:
             self._session = session
             self._connected.set()
             self.emit({"type": "voice_state", "state": "listening"})
-            self._open_audio()
-            tasks = [
-                asyncio.create_task(self._send_audio(session)),
-                asyncio.create_task(self._receive(session)),
-                asyncio.create_task(self._stop_event.wait()),
-            ]
             try:
+                self._open_audio()
+                tasks = [
+                    asyncio.create_task(self._send_audio(session)),
+                    asyncio.create_task(self._receive(session)),
+                    asyncio.create_task(self._stop_event.wait()),
+                ]
                 done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
                 for task in pending:
                     task.cancel()
