@@ -225,6 +225,11 @@ def build_context(query="",max_chars=6200):
         parts.extend(f"- [{x['level']} | {x['state']} | source={x['source']} | "
           f"match={x.get('match','unknown')}] {x['content']}" for x in hits)
     parts.append(_metacognitive_rules())
+    try:
+        from core.cognitive_agents import specialist_protocol
+        parts.append(specialist_protocol())
+    except Exception as exc:
+        print(f"[YonBrain] Specialist role guidance unavailable: {exc}")
     return "\n\n".join(parts)[:max(1000,int(max_chars))]
 
 def assess_request(request):
@@ -238,7 +243,7 @@ def assess_request(request):
       "decision":"research" if research else ("plan" if multi else "respond_or_act")}
 
 def run_cognitive_cycle(request):
-    state={"request":str(request or ""),"assessment":{},"memories":[],"plan":[],"review":""}
+    state={"request":str(request or ""),"assessment":{},"memories":[],"plan":[],"review":"","specialists":[]}
     def assess(s): s["assessment"]=assess_request(s["request"]); return s
     def retrieve_node(s): s["memories"]=retrieve(s["request"],limit=6); return s
     def plan_node(s):
@@ -250,6 +255,11 @@ def run_cognitive_cycle(request):
         return s
     def review_node(s):
         s["review"]="No outcome has been verified yet; this is a plan, not completion."
+        try:
+            from core.cognitive_agents import specialist_assignments
+            s["specialists"]=specialist_assignments(s["request"])
+        except Exception:
+            s["specialists"]=[]
         return s
     try:
         from langgraph.graph import END,START,StateGraph
