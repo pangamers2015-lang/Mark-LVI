@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parent
 WEB = ROOT / "web"
 CONFIG = ROOT / "config" / "api_key.json"
 HOST, PORT = "127.0.0.1", 8765
-TEXT_MODEL = "gemini-2.5-flash"
+TEXT_MODEL = "gemini-3.8-flash"
 MAX_BODY = 8 * 1024 * 1024
 _clients: list[queue.Queue] = []
 _clients_lock = threading.Lock()
@@ -129,7 +129,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/api/config":
             self.send_json(200, {"configured": bool(api_key()), "voice_running": bool(_voice and _voice.running),
                                  "voice_connected": bool(_voice and _voice.connected),
-                                 "text_model": TEXT_MODEL, "live_model": "models/gemini-3.1-flash-live-preview"})
+                                 "text_model": TEXT_MODEL, "live_model": "gemini-3.8-live"})
             return
         if self.path == "/api/events":
             self.send_response(200)
