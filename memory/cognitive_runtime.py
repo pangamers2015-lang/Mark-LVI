@@ -270,6 +270,7 @@ def run_cognitive_cycle(request):
             memories:list
             plan:list
             review:str
+            specialists:list
         graph=StateGraph(BrainState)
         for name,node in (("assess",assess),("retrieve",retrieve_node),
           ("plan",plan_node),("review",review_node)): graph.add_node(name,node)
