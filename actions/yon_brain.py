@@ -86,10 +86,15 @@ def yon_brain(parameters: dict, player=None) -> str:
                 "Coordinator: independently assess this response, verify important claims, "
                 "and do not treat it as authoritative solely because another model produced it.")
         if action=="status":
+            from importlib.util import find_spec
             goals=cognitive_store.list_goals(limit=100); graph=brain.graph_summary()
+            dependency_installed=find_spec("sentence_transformers") is not None
+            semantic_state=("model loaded" if brain._EMBEDDER is not None else
+                "dependency installed; model loads on first semantic operation"
+                if dependency_installed else "optional dependency not installed")
             return (f"Yon cognitive system initialized={brain.initialize()}; active_goals={len(goals)}; "
-                f"graph_nodes={graph.get('nodes',0)}; graph_edges={graph.get('edges',0)}. "
-                "Semantic retrieval requires its optional model dependency.")
+                f"graph_nodes={graph.get('nodes',0)}; graph_edges={graph.get('edges',0)}; "
+                f"semantic_retrieval={semantic_state}.")
         return "Unknown action. Use status, remember, search, validate, goal_add, goal_update, goal_list, checkpoint, depend, index, consolidate, relate, reflect, consult_local or obsidian_export."
     except Exception as exc:
         return f"Yon cognitive tool failed safely: {type(exc).__name__}: {exc}"
