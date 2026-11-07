@@ -2754,6 +2754,97 @@ class JarvisLive:
                 self.ui.write_log("SYS: Could not fetch the news for the briefing.")
 
         asyncio.create_task(_deliver_news())
+    async def _run_github_inbox_monitor(self) -> None:
+        """Poll GitHub while the live session is connected and speak safe one-shot TXT requests."""
+        from memory.github_inbox import (
+            GITHUB_POLL_SECONDS, process_remote_inbox, pending_live_speech,
+            mark_live_speech_delivered,
+        )
+        last_error = ""
+        print(f"[YonInbox] Live GitHub monitor active (every {GITHUB_POLL_SECONDS}s).")
+        while True:
+            await asyncio.sleep(GITHUB_POLL_SECONDS)
+            if not self.session:
+                continue
+            try:
+                result = await asyncio.to_thread(process_remote_inbox)
+                error = "; ".join(result.get("errors", [])) if result.get("errors") else ""
+                if error:
+                    if error != last_error:
+                        print(f"[YonInbox] GitHub polling issue: {error}")
+                        self.ui.write_log("SYS: Monitor de aprendizado do GitHub temporariamente indisponível.")
+                    last_error = error
+                else:
+                    last_error = ""
+                if result.get("processed"):
+                    count = int(result["processed"])
+                    print(f"[YonInbox] Learned {count} new TXT file(s) from GitHub.")
+                    self.ui.write_log(f"SYS: Aprendizado concluído: {count} novo(s) arquivo(s) TXT.")
+            except Exception as exc:
+                error = f"{type(exc).__name__}: {exc}"
+                if error != last_error:
+                    print(f"[YonInbox] Monitor error: {error}")
+                last_error = error
+                continue
+
+            pending = await asyncio.to_thread(pending_live_speech, 1)
+            if not pending or not self.session:
+                continue
+            if self._wake_enabled and not self._awake:
+                continue
+            if self._rx_deadline is not None:
+                continue
+            with self._speaking_lock:
+                speaking = self._is_speaking
+            if speaking or (self.audio_in_queue and not self.audio_in_queue.empty()):
+                continue
+            # Do not inject a background instruction into an active response.
+            # A completed turn plus a short quiet window is the safe hand-off point.
+            if not self._last_turn_complete_at:
+                continue
+            if time.monotonic() - self._last_turn_complete_at < 1.5:
+                continue
+            if self._tail_active():
+                continue
+
+            directive = pending[0]
+            session = self.session
+            try:
+                self._last_turn_complete_at = 0.0
+                await session.send_client_content(
+                    turns={"role": "user", "parts": [{
+                        "text": "Speak aloud exactly the following user-requested words. "
+                                "Do not add an introduction, explanation, or any other content: "
+                                + directive["speech_text"]
+                    }]},
+                    turn_complete=True,
+                )
+                deadline = time.monotonic() + 90.0
+                delivered = False
+                while time.monotonic() < deadline and self.session is session:
+                    await asyncio.sleep(0.2)
+                    with self._speaking_lock:
+                        still_speaking = self._is_speaking
+                    queued_audio = bool(self.audio_in_queue and not self.audio_in_queue.empty())
+                    if (
+                        self._last_turn_complete_at > 0.0
+                        and not still_speaking
+                        and not queued_audio
+                        and not self._tail_active()
+                    ):
+                        delivered = True
+                        break
+                if delivered:
+                    count = await asyncio.to_thread(
+                        mark_live_speech_delivered, [directive["id"]]
+                    )
+                    if count:
+                        print(f"[YonInbox] Delivered live TXT speech directive #{directive['id']}.")
+                else:
+                    print(f"[YonInbox] Live TXT speech directive #{directive['id']} was not confirmed; it remains pending.")
+            except Exception as exc:
+                print(f"[YonInbox] Could not deliver live speech: {type(exc).__name__}: {exc}")
+
     # ── Session memory ──────────────────────────────────────────────────────────
 
     async def _save_session_summary(self) -> None:
@@ -3226,6 +3317,7 @@ class JarvisLive:
                     self._reconnect_event.clear()  # ignore requests from before this session
                     tg.create_task(self._watch_reconnect())
                     tg.create_task(self._watch_shutdown())
+                    tg.create_task(self._run_github_inbox_monitor())
                     tg.create_task(self._watch_stall())
                     tg.create_task(self._send_realtime())
                     tg.create_task(self._listen_audio())
