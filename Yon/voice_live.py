@@ -41,6 +41,7 @@ class LiveVoice:
         self._echo = EchoGuard()
         self._barge = BargeInDetector()
         self._interrupted = False
+        self._ptt_held = threading.Event()
         self._mic_stream = None
         self._speaker_stream = None
 
@@ -64,6 +65,34 @@ class LiveVoice:
         if self._loop and self._loop.is_running() and self._stop_event is not None:
             self._loop.call_soon_threadsafe(self._stop_event.set)
         self._stop_audio()
+
+    def hold_to_talk(self, held: bool):
+        held = bool(held)
+        if held:
+            if self._ptt_held.is_set():
+                return
+            self._ptt_held.set()
+            if self._speaking.is_set():
+                self.interrupt()
+            self.emit({"type": "voice_state", "state": "listening"})
+            return
+        if not self._ptt_held.is_set():
+            return
+        self._ptt_held.clear()
+        if self._loop and self._loop.is_running() and self._mic_queue is not None:
+            self._loop.call_soon_threadsafe(self._queue_end_marker)
+        self.emit({"type": "voice_state", "state": "thinking"})
+
+    def _queue_end_marker(self):
+        if self._mic_queue is None:
+            return
+        if self._mic_queue.full():
+            try:
+                self._mic_queue.get_nowait()
+                self._mic_queue.task_done()
+            except asyncio.QueueEmpty:
+                pass
+        self._mic_queue.put_nowait(None)
 
     def interrupt(self):
         self._interrupted = True
@@ -119,7 +148,7 @@ class LiveVoice:
                 "Seja natural, atento e conciso. Ouça o usuário enquanto ele fala e responda "
                 "como em uma conversa real."
             ),
-            "speech_config": {"voice_config": {"prebuilt_voice_config": {"voice_name": "Aoede"}}},
+            "speech_config": {"voice_config": {"prebuilt_voice_config": {"voice_name": "Orus"}}},
         }
         self.emit({"type": "voice_state", "state": "connecting"})
         async with client.aio.live.connect(model=LIVE_MODEL, config=config) as session:
@@ -149,17 +178,11 @@ class LiveVoice:
 
     def _open_audio(self):
         def mic_callback(indata, frames, timing, status):
-            pcm = bytes(indata)
-            if self._speaking.is_set():
-                samples = np.frombuffer(pcm, dtype="<i2").astype(np.float32)
-                level = float(np.sqrt(np.mean(samples * samples))) / 32768.0 if samples.size else 0.0
-                is_user = self._echo.is_user_speech(pcm, INPUT_RATE, level)
-                confirmed = bool(self._echo.ready_for_barge_in and is_user)
-                captured = self._barge.observe(pcm, confirmed, self._echo.required_blocks)
-                if captured and self._loop:
-                    self._loop.call_soon_threadsafe(self._barge_in, captured)
+            # The audio device stays ready, but no samples reach Gemini unless
+            # the user is physically holding the push-to-talk key.
+            if not self._ptt_held.is_set():
                 return
-            self._barge.reset()
+            pcm = bytes(indata)
             if self._loop and self._mic_queue is not None:
                 self._loop.call_soon_threadsafe(self._queue_mic, pcm)
 
@@ -229,9 +252,12 @@ class LiveVoice:
         while not self._stop.is_set():
             pcm = await self._mic_queue.get()
             try:
-                await session.send_realtime_input(
-                    audio=types.Blob(data=pcm, mime_type=f"audio/pcm;rate={INPUT_RATE}")
-                )
+                if pcm is None:
+                    await session.send_realtime_input(audio_stream_end=True)
+                else:
+                    await session.send_realtime_input(
+                        audio=types.Blob(data=pcm, mime_type=f"audio/pcm;rate={INPUT_RATE}")
+                    )
             finally:
                 self._mic_queue.task_done()
 
