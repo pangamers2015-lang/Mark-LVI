@@ -1,0 +1,82 @@
+PLANO DE REESTRUTURACAO DO YON — DOCUMENTO DE PLANEJAMENTO
+Versao: 1.0
+Data: 07/11/2026
+Status: RASCUNHO INICIAL — NAO IMPLEMENTAR AUTOMATICAMENTE
+
+OBJETIVO
+Planejar uma nova arquitetura para o Yon, tendo um modelo da OpenAI pela API como cerebro central de raciocinio e coordenacao. Este documento e um registro de planejamento para o usuario e o ChatGPT. Nao e uma instrucao para o aplicativo carregar, interpretar ou executar.
+
+PRINCIPIO FUNDAMENTAL
+Separar inteligencia, voz, memoria e ferramentas. O cerebro central decide e coordena; servicos especializados executam tarefas. Evitar pagar por recursos que podem ser executados localmente ou por fornecedores alternativos.
+
+ARQUITETURA DESEJADA (PROPOSTA)
+1. CEREBRO CENTRAL — API OPENAI
+- Interpretar pedidos, raciocinar, planejar, decidir e coordenar ferramentas.
+- Usar contexto e memoria recuperada pelo Yon.
+- Escolher quando consultar especialistas ou executar ferramentas.
+- Controlar tamanho do contexto, frequencia de chamadas e nivel de raciocinio para controlar custos.
+- O modelo exato e seus precos devem ser confirmados na documentacao oficial antes da implementacao.
+
+2. VOZ E AUDIO
+- Preferir reconhecimento de fala e sintese de voz locais/gratuitos quando a qualidade e o hardware permitirem.
+- Avaliar Piper e Kokoro para sintese local; avaliar alternativas locais para transcricao.
+- A voz pode ser apenas a interface de entrada/saida, sem precisar ser o cerebro.
+- Manter possibilidade de usar voz hospedada quando houver vantagem clara.
+- Verificar requisitos, licencas, idiomas, qualidade, latencia e consumo de recursos.
+
+3. MEMORIA DO YON
+- Manter memoria persistente propria, com armazenamento local e recuperacao contextual.
+- Registrar fatos do projeto, preferencias, decisoes, procedimentos, resultados e evidencias.
+- Recuperar somente o contexto relevante para cada solicitacao.
+- A memoria complementa o modelo; nao deve tentar reensinar conhecimentos gerais que o modelo ja possui.
+- Definir politicas de validacao, atualizacao, privacidade e exclusao.
+
+4. IMAGENS, VIDEO E OUTRAS MIDIAS
+- Avaliar fornecedores/API alternativos para geracao e edicao de imagens e video.
+- O cerebro central cria instrucoes e coordena; o servico especializado gera a midia.
+- Comparar qualidade, preco por tarefa, limites, direitos de uso e disponibilidade no Brasil.
+- Nao presumir que um servico ou endpoint continua disponivel: verificar antes de integrar.
+
+5. PESQUISA NA WEB
+- Usar ferramenta/fornecedor de pesquisa separado quando for mais economico ou adequado.
+- O cerebro central formula a consulta, avalia fontes e sintetiza os resultados.
+- Registrar fontes e diferenciar informacao verificada de hipotese.
+
+6. PROGRAMACAO E EXECUCAO
+- Avaliar FCC Cloud como agente de programacao e execucao delegada.
+- Manter Qwen local como auxiliar opcional, subordinado ao cerebro central.
+- O cerebro central continua coordenando e validando os resultados.
+- Nenhum agente deve alterar o projeto principal, instalar dependencias ou executar operacoes destrutivas sem as permissoes definidas.
+
+7. ORQUESTRACAO E CUSTOS
+- Yon pode permanecer aberto 24 horas, mas nao deve enviar chamadas continuamente sem necessidade.
+- Chamadas ao modelo acontecem quando ha uma tarefa, uma decisao ou uma verificacao justificavel.
+- Implementar limites de gasto, contagem de tokens, metricas por tarefa, alertas e modo economico.
+- Definir um orcamento inicial de teste de aproximadamente R$ 50, sujeito a cambio, impostos e tarifas.
+- Nao tratar esse valor como assinatura nem como garantia de quantidade fixa de tokens, minutos ou imagens.
+
+REQUISITOS DE SEGURANCA E CONTINUIDADE
+- Preservar chaves de API fora do GitHub e nunca registrar segredos em logs.
+- Usar permissoes minimas, ambientes isolados e validacao antes de integrar codigo.
+- Nao apagar nem substituir os sistemas atuais durante a fase de planejamento.
+- Implementar em etapas pequenas, com testes e confirmacao do usuario.
+- Distinguir claramente planejamento, codigo enviado ao GitHub, atualizacao local, instalacao e teste real.
+
+PRIMEIRAS ETAPAS DE TRABALHO
+1. Levantar o que existe hoje no Yon e quais partes devem ser preservadas.
+2. Definir o modelo OpenAI central e confirmar precos, limites e recursos atuais.
+3. Desenhar o fluxo de mensagens, memoria, ferramentas e voz.
+4. Estimar custos com cenarios reais de uso diario.
+5. Definir interfaces entre cerebro, voz, memoria e provedores externos.
+6. Implementar primeiro um prototipo isolado, sem substituir o aplicativo atual.
+7. Testar qualidade, latencia, estabilidade e custo antes de decidir a migracao.
+
+PENDENCIAS A CONFIRMAR
+- Modelo OpenAI exato, precos atuais, limites de taxa e disponibilidade regional.
+- Qual solucao local de voz funciona melhor no computador do usuario.
+- Fornecedor de imagem/video e ferramenta de pesquisa com melhor custo-beneficio.
+- Como preservar e aproveitar a memoria cognitiva ja existente sem duplicacao.
+- Como integrar FCC Cloud e Qwen sem retirar a autoridade do cerebro central.
+
+REGRA FINAL
+Este arquivo e apenas um plano de trabalho. Nao deve ser importado automaticamente como conhecimento, personalidade, prompt ou comando pelo Yon. Nenhuma mudanca no codigo do aplicativo esta autorizada por este registro.
