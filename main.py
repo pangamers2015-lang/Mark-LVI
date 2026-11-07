@@ -388,7 +388,8 @@ TOOL_DECLARATIONS = [
         "description": (
             "Shows a visual information card in the Yon interface. Use this for "
             "important results that benefit from a popup, especially football match "
-            "scores, news, and concise visual summaries. For a match, provide home_team, "
+            "scores, news, concise visual summaries, and whenever the user explicitly asks " 
+            "to put a link on screen. For a match, provide home_team, "
             "away_team, score, and verified home_logo/away_logo image URLs when available. "
             "Never invent scores, teams, logos, or image URLs. Put source URLs in text; "
             "they become clickable. Use after researching and verifying the information."
