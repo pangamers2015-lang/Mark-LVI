@@ -27,9 +27,9 @@ def _safe_relative(value: str) -> str:
     path = PurePosixPath(value)
     if not value or path.is_absolute() or any(part in {"..", ""} for part in path.parts):
         raise ValueError(f"Caminho de arquivo inválido: {value!r}")
-    if path.parts[0] in {".git", ".ion", ".venv", "venv", "node_modules"}:
+    if any(part in {".git", ".ion", ".venv", "venv", "node_modules"} for part in path.parts):
         raise ValueError(f"O supervisor não permite gravar em {value!r}.")
-    if path.name.lower() == ".env":
+    if path.name.lower().startswith(".env") or path.as_posix().lower() == "config/api_keys.json":
         raise ValueError("Agentes não podem gravar arquivos de segredo .env.")
     return str(path)
 
@@ -49,7 +49,7 @@ def _test_command(command: str, root: Path, timeout: int = 180) -> dict:
     if not raw or any(x in raw for x in (";", "&&", "||", "|", ">", "<", "\n", "\r")):
         return {"command": raw, "passed": False, "blocked": True, "output": "Comando vazio ou contém operador de shell não permitido."}
     try:
-        args = shlex.split(raw, posix=(sys.platform != "win32"))
+        args = shlex.split(raw, posix=True)
     except ValueError as exc:
         return {"command": raw, "passed": False, "blocked": True, "output": str(exc)}
     if not args:
@@ -133,9 +133,11 @@ class IonSupervisor:
                 task_files = set(task.files)
                 if used_files.intersection(task_files):
                     continue
-                agent = task.preferred_agent if task.preferred_agent in self.providers else (
-                    "nvidia" if agent_load["nvidia"] <= agent_load["gemini"] else "gemini"
-                )
+                preferred = task.preferred_agent if task.preferred_agent in self.providers else ""
+                if preferred and agent_load[preferred] <= agent_load["gemini" if preferred == "nvidia" else "nvidia"]:
+                    agent = preferred
+                else:
+                    agent = "nvidia" if agent_load["nvidia"] <= agent_load["gemini"] else "gemini"
                 batch.append((task, agent))
                 used_files.update(task_files)
                 agent_load[agent] += 1
@@ -216,6 +218,7 @@ class IonSupervisor:
 
     async def _implement_and_test(self, task: WorkTask, agent: str, workspace: Path, plan: ProjectPlan) -> dict:
         provider = self.providers[agent]
+        actual_agent = agent
         allowed = set(task.files)
         instructions = (
             f"Você é o executor de implementação {agent.upper()} do Ion. "
@@ -251,7 +254,18 @@ Retorne JSON:
                     + json.dumps(last_checks, ensure_ascii=False)
                     + "\nCorrija somente os arquivos permitidos e retorne o conteúdo integral atualizado em JSON."
                 )
-            raw = await provider.complete(instructions, prompt, json_mode=True)
+            try:
+                raw = await provider.complete(instructions, prompt, json_mode=True)
+            except Exception as primary_error:
+                fallback = "gemini" if actual_agent == "nvidia" else "nvidia"
+                if not config.api_key(fallback):
+                    raise RuntimeError(f"{actual_agent} indisponível e {fallback} sem chave: {primary_error}") from primary_error
+                provider = self.providers[fallback]
+                actual_agent = fallback
+                raw = await provider.complete(
+                    instructions + f" O provedor {agent} falhou; você assumiu a tarefa como {actual_agent.upper()}.",
+                    prompt, json_mode=True
+                )
             payload = extract_json(raw)
             generated = payload.get("files")
             if not isinstance(generated, list) or not generated:
@@ -287,7 +301,7 @@ Retorne JSON:
             blocked = any(check.get("blocked") for check in last_checks)
             passed = all(check.get("passed") for check in last_checks) if last_checks else True
             if passed:
-                return {"status": "completed", "summary": summary, "files": written, "checks": last_checks, "attempts": attempt + 1}
+                return {"status": "completed", "summary": summary, "files": written, "checks": last_checks, "attempts": attempt + 1, "agent_used": actual_agent}
             if blocked:
-                return {"status": "blocked", "summary": summary, "files": written, "checks": last_checks, "attempts": attempt + 1}
-        return {"status": "failed", "summary": summary, "files": list(allowed), "checks": last_checks, "attempts": config.max_correction_attempts() + 1}
+                return {"status": "blocked", "summary": summary, "files": written, "checks": last_checks, "attempts": attempt + 1, "agent_used": actual_agent}
+        return {"status": "failed", "summary": summary, "files": list(allowed), "checks": last_checks, "attempts": config.max_correction_attempts() + 1, "agent_used": actual_agent}
