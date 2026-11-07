@@ -1,60 +1,69 @@
 # Yon — agente pessoal autônomo
 
-Este diretório é a raiz do novo projeto Yon. O projeto será construído de forma independente; não importar a arquitetura antiga do Yon/Mark-LVI.
+Este diretório é a raiz isolada do novo projeto Yon. O cérebro autônomo ainda será construído em etapas posteriores; esta primeira entrega estabelece a interface e a camada de interação.
 
-## Objetivo inicial
+## Primeira versão: interface e conversação
 
-Construir um agente pessoal completo, começando por uma camada de interação funcional e evoluindo para o cérebro autônomo.
+- Orb holográfica de pontos, baseada na animação visual do projeto de origem, com fundo escuro e paleta clara/neutra.
+- Chat lateral funcional; **T** abre o chat e **Esc** fecha.
+- Engrenagem para configurar a chave da API Gemini.
+- Entrada de texto, envio com Enter e leitura de anexos de texto comuns.
+- Transcrição de entrada e saída exibida dentro do chat, sem texto sobreposto à Orb.
+- Captura contínua do microfone e resposta falada pelo Gemini Live.
+- Reprodução em blocos curtos e interrupção por voz com detecção de eco adaptativa e confirmação de fala sustentada.
+- Reconexão automática da sessão de voz após uma queda.
 
-## Reaproveitamento seletivo da interface e interação existentes
+## Componentes de voz extraídos/adaptados
 
-Extrair e adaptar somente os componentes necessários do projeto de origem:
+A implementação de origem foi inspecionada em `main.py`, `core/echo.py`, `core/barge_in.py`, `providers/audio.py` e `web/index.html`.
 
-- Orb holográfica: aparência, cores, fundo e animações atuais.
-- Chat: estrutura e comportamento atuais; a tecla **T** abre o chat.
-- Engrenagem: menu e controles de API existentes (confirmar o comportamento exato antes de alterar).
-- Entrada de texto: receber, ler e compreender mensagens.
-- Arquivos: receber e interpretar arquivos enviados pelo chat.
-- Áudio: captura do microfone, reconhecimento de fala, conversação, resposta falada e transcrição exibida no chat.
-- Camada atual de modelo/API para compreensão e conversação, após identificar no repositório a implementação e suas dependências.
+- Modelo de voz/conversa em tempo real identificado no código de origem: `models/gemini-3.1-flash-live-preview`.
+- Modelo textual de reserva: `gemini-2.5-flash`.
+- Adaptados para este projeto: fluxo PCM 16 kHz de entrada / 24 kHz de saída, transcrições de entrada/saída, reprodução em blocos, detecção adaptativa de eco e interrupção por fala.
+- A interface não reaproveita os pop-ups antigos nem as legendas sobre a Orb.
 
-## Ajustes obrigatórios na interface
+A nova implementação é isolada: não importa o antigo `main.py`, o sistema de ferramentas, a memória ou a arquitetura cognitiva do projeto de origem.
 
-- Remover as legendas/letras sobrepostas à Orb durante a fala, que apresentam falhas.
-- Remover os pop-ups atuais.
-- Manter a Orb, o fundo, as cores, o chat, o atalho **T** e a engrenagem.
-- É permitido adotar outro framework de interface se houver vantagem técnica, preservando a identidade visual e o comportamento acordado.
+## Instalação e execução no Windows
 
-## Conversação natural em tempo real
+Requer Python 3.11 ou superior.
 
-- Baixa latência e escuta contínua.
-- Interrupção da fala do Yon pelo usuário.
-- Feedbacks curtos e naturais de acompanhamento.
-- Compreensão incremental enquanto o usuário ainda explica.
-- Planejamento e execução em segundo plano durante a conversa.
-- Continuidade de contexto entre voz, chat, raciocínio e execução.
+```powershell
+cd Yon
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+python app.py
+```
 
-## Arquitetura nova a construir
+Na primeira execução, abra a engrenagem e salve uma chave válida da API Gemini. A chave é gravada localmente em `config/api_key.json`, ignorada pelo Git. A interface abre em `http://127.0.0.1:8765`.
 
-1. Cérebro central e orquestrador.
-2. Memória de curto e longo prazo.
-3. Enciclopédia técnica e grafo de conhecimento.
-4. Motor de identificação de lacunas, pesquisa, aprendizagem, testes e validação.
-5. Catálogo operacional de ferramentas, integrações e comandos.
-6. Descoberta de capacidades instaladas no computador e uso seguro de ferramentas.
-7. Sistema multiagente e execução paralela.
-8. Planejamento, execução, observabilidade e verificação de resultados.
-9. Autoevolução com versões experimental, estável e recuperação.
-10. Interface integrada à camada de interação reaproveitada.
+## Dependências
 
-## Princípios de desenvolvimento
+- `numpy`
+- `sounddevice`
+- `google-genai`
 
-- O novo Yon é um projeto do zero; reaproveitamento limitado aos componentes explicitamente listados acima.
-- Não presumir capacidades: inspecionar, documentar e testar cada integração.
-- Ferramentas externas devem ser descobertas, avaliadas e validadas antes do uso.
-- Execução no computador deve respeitar permissões e políticas explícitas.
-- O trabalho será desenvolvido nesta pasta/branch isolada; a substituição da estrutura principal do repositório só ocorrerá depois da validação e autorização do usuário.
+A interface usa HTML/CSS/JavaScript sem framework adicional. O servidor local usa apenas a biblioteca padrão do Python. Não é necessário instalar Node.js, PyQt ou Docker para esta etapa.
 
-## Estado
+## Limitações que ainda precisam de validação no computador
 
-Fundação documental criada. Próxima atividade: inventariar a implementação de voz, chat, Orb, engrenagem e API no código de origem para extrair apenas os componentes aprovados.
+- O fluxo de áudio foi adaptado e precisa ser testado com o microfone e os alto-falantes reais. O cancelamento adaptativo de eco reduz falsos cortes, mas o resultado depende do ambiente acústico; fones de ouvido são úteis no primeiro teste.
+- A interrupção por voz está implementada, mas precisa de ajuste de sensibilidade no hardware real.
+- O reconhecimento/transcrição e a fala em tempo real dependem da disponibilidade e das cotas do modelo Gemini Live.
+- Anexos nesta primeira versão aceitam arquivos de texto (TXT, MD, CSV, JSON e código); PDF e documentos Office ainda não foram adicionados.
+- Feedbacks verbais curtos enquanto o usuário ainda está elaborando uma ideia, raciocínio incremental durante a fala e execução paralela de tarefas serão evoluções posteriores do motor de conversação e do cérebro.
+
+## Próximas etapas
+
+1. Instalar dependências e testar microfone, áudio de saída, transcrição, chat, interrupção e reconexão.
+2. Ajustar a sensibilidade do áudio conforme os testes reais.
+3. Refinar as configurações da API e os anexos.
+4. Construir o cérebro central, memória, enciclopédia técnica, catálogo de ferramentas e sistema de aprendizagem/autoevolução.
+
+## Princípios
+
+- Não reutilizar a arquitetura antiga do agente; reaproveitamento limitado aos componentes de interface e interação listados acima.
+- Não presumir que uma integração funciona sem teste.
+- Manter o projeto nesta pasta/branch isolada até validação e autorização explícita para qualquer substituição da estrutura principal.
