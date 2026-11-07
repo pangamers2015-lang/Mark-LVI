@@ -61,7 +61,11 @@ from memory.learning_store import (
     learn_from_user_text, format_learning_for_prompt,
 )
 from memory.continuity_store import record_turn, format_recent_context
-from memory.cognitive_runtime import (\n    build_context as build_cognitive_context,\n    record_user_turn as cognitive_record_user_turn,\n    save_task_checkpoint as cognitive_save_checkpoint,\n)
+from memory.cognitive_runtime import (
+    build_context as build_cognitive_context,
+    record_user_turn as cognitive_record_user_turn,
+    save_task_checkpoint as cognitive_save_checkpoint,
+)
 
 # The file-backed tools (open_app, web_search, browser_control, …) are no longer
 # imported or declared here — they self-describe via a TOOL dict in their own
