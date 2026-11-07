@@ -157,6 +157,10 @@
   .yon-setup-box button { width:100%; margin-top:18px; }
 
 
+  #yonVideo,#yonCamera { position:fixed; inset:8vh 8vw; z-index:35; background:#050505; border:1px solid rgba(255,255,255,.2); border-radius:14px; display:grid; place-items:center; overflow:hidden; }
+  #yonVideo[hidden],#yonCamera[hidden] { display:none; }
+  #yonVideo video,#yonCamera img { max-width:100%; max-height:100%; }
+  .yon-close { position:absolute; right:12px; top:10px; z-index:2; background:rgba(255,255,255,.1); color:white; border:0; border-radius:8px; padding:8px 12px; cursor:pointer; }
   #yonTasks { position:fixed; left:24px; bottom:64px; z-index:18; display:flex; flex-direction:column; gap:8px; width:min(330px,calc(100vw - 48px)); pointer-events:none; }
   .yon-task-card { pointer-events:auto; padding:12px 14px; border:1px solid rgba(255,255,255,.16); border-radius:11px; background:rgba(10,10,12,.78); backdrop-filter:blur(16px); box-shadow:0 8px 30px rgba(0,0,0,.28); animation:entra .25s ease both; }
   .yon-task-name { font-size:12px; color:#fff; margin-bottom:5px; }
@@ -209,11 +213,14 @@
   <button class="yon-menu-button" data-action="logs">Registro do Yon</button>
   <button class="yon-menu-button" data-action="wake">Estado de ativação</button>
   <button class="yon-menu-button" data-action="wake-manual">Acordar / dormir</button>
+  <button class="yon-menu-button" data-action="wake-toggle">Ativar / desativar palavra-chave</button>
   <button class="yon-menu-button" data-action="wake-install">Instalar palavra-chave</button>
   <button class="yon-menu-button" data-action="audio">Reconfigurar áudio</button>
   <button class="yon-menu-button" data-action="remote">Acesso remoto</button>
 </div>
 <div id="yonTasks"></div>
+<div id="yonVideo" hidden><button id="yonVideoClose" class="yon-close">Fechar</button><video id="yonVideoPlayer" controls autoplay></video></div>
+<div id="yonCamera" hidden><button id="yonCameraClose" class="yon-close">Fechar</button><img id="yonCameraImage" alt="Câmera"></div>
 <div id="caixa"><input id="entrada" type="text" placeholder="Digite e aperte Enter" autocomplete="off"></div>
 
 <div class="legenda">
@@ -573,6 +580,12 @@
         falar(e.audio);
       } else if (e.tipo === "aviso") {
         avisar(e.texto);
+      } else if (e.tipo === "setup") {
+        el("yonSetup").hidden = !e.show;
+      } else if (e.tipo === "nivel") {
+        nivelExterno = Math.max(0, Math.min(1, Number(e.valor) || 0));
+      } else if (e.tipo === "glance") {
+        nivelExterno = Math.max(nivelExterno, 0.15);
       } else if (e.tipo === "conteudo") {
         el("voce").textContent = "";
         el("resposta").textContent = e.texto || "";
@@ -591,9 +604,11 @@
       } else if (e.tipo === "quiz") {
         mostrarPopup("Questionário: " + (e.topico || ""), "Questionário recebido. O painel interativo será conectado na próxima etapa.");
       } else if (e.tipo === "camera") {
-        mostrarPopup("Câmera", "Transmissão da câmera solicitada pelo Yon.");
+        if (e.data) { el("yonCameraImage").src = "data:image/jpeg;base64," + e.data; el("yonCamera").hidden = false; }
+        if (e.start === false) el("yonCamera").hidden = true;
       } else if (e.tipo === "video") {
-        mostrarPopup(e.titulo || "Vídeo", "O Yon solicitou a reprodução de mídia.");
+        if (e.close) { el("yonVideoPlayer").pause(); el("yonVideo").hidden = true; }
+        else if (e.source) { const src = e.source.includes("://") ? e.source : "file:///" + e.source.replace(/\\/g,"/").replace(/^\//,""); el("yonVideoPlayer").src = src; el("yonVideo").hidden = false; }
       } else if (e.tipo === "wake") {
         mostrarPopup("Modo de ativação", e.mensagem || "Estado do modo de ativação atualizado.");
       }
@@ -646,7 +661,7 @@
         const r=await fetch("/api/action",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action})});
         const d=await r.json(); const items=d.items||[];
         mostrarPopup(action==="tasks"?"Tarefas":action==="plugins"?"Plugins":"Registro",items.length?items.map(x=>typeof x==="string"?x:(x.title||x.name||x.message||JSON.stringify(x))).join("\\n"):"Nenhum item disponível.");
-      }else if(action==="wake"||action==="wake-manual"||action==="wake-install"){
+      }else if(action==="wake"||action==="wake-manual"||action==="wake-toggle"||action==="wake-install"){
         const a=action==="wake"?"state":action==="wake-manual"?"manual":action==="wake-toggle"?"toggle":"install";
         const r=await fetch("/api/wake",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:a,enabled:true})});
         const d=await r.json();mostrarPopup("Ativação",JSON.stringify(d.result||d));
@@ -674,6 +689,8 @@
     }catch(_){}
   }
   setInterval(atualizarTarefas,2500); atualizarTarefas();
+  el("yonVideoClose").addEventListener("click",()=>{el("yonVideoPlayer").pause();el("yonVideo").hidden=true;});
+  el("yonCameraClose").addEventListener("click",()=>{el("yonCamera").hidden=true;});
 
   // ---------------------------------------------------------- configurações (engrenagem)
   const painel = el("config");
