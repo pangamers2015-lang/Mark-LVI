@@ -156,6 +156,19 @@
   .yon-setup-box input,.yon-setup-box select { box-sizing:border-box; width:100%; padding:12px; border-radius:8px; border:1px solid rgba(255,255,255,.2); background:#09090a; color:#fff; font:inherit; }
   .yon-setup-box button { width:100%; margin-top:18px; }
 
+
+  #yonTasks { position:fixed; left:24px; bottom:64px; z-index:18; display:flex; flex-direction:column; gap:8px; width:min(330px,calc(100vw - 48px)); pointer-events:none; }
+  .yon-task-card { pointer-events:auto; padding:12px 14px; border:1px solid rgba(255,255,255,.16); border-radius:11px; background:rgba(10,10,12,.78); backdrop-filter:blur(16px); box-shadow:0 8px 30px rgba(0,0,0,.28); animation:entra .25s ease both; }
+  .yon-task-name { font-size:12px; color:#fff; margin-bottom:5px; }
+  .yon-task-status { font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:rgba(255,255,255,.48); }
+  .yon-task-track { height:2px; background:rgba(255,255,255,.12); margin-top:9px; overflow:hidden; border-radius:3px; }
+  .yon-task-track span { display:block; height:100%; background:#fff; width:var(--progress,35%); transition:width .3s; }
+  #yonMenu { position:fixed; left:24px; top:24px; z-index:25; color:rgba(255,255,255,.55); background:transparent; border:1px solid rgba(255,255,255,.14); border-radius:50%; width:36px; height:36px; cursor:pointer; font-size:20px; }
+  #yonMenuPanel { position:fixed; left:24px; top:68px; z-index:30; width:250px; padding:10px; background:rgba(12,12,14,.92); border:1px solid rgba(255,255,255,.18); border-radius:12px; backdrop-filter:blur(18px); }
+  #yonMenuPanel[hidden] { display:none; }
+  .yon-menu-button { width:100%; padding:10px; border:0; border-radius:7px; color:#eee; background:transparent; text-align:left; cursor:pointer; font:inherit; font-size:12px; }
+  .yon-menu-button:hover { background:rgba(255,255,255,.09); }
+
 </style>
 </head>
 <body data-estado="iniciando">
@@ -166,6 +179,7 @@
   <span class="estado"><span class="ponto"></span><span id="estadoTexto">iniciando</span></span>
 </div>
 
+<button id="yonMenu" title="Recursos do Yon">⋯</button>
 <button id="engrenagem" class="engrenagem" aria-label="Configurações" title="Configurações">
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
 </button>
@@ -189,6 +203,17 @@
 <div id="yonConfirm" hidden><div class="yon-confirm-box"><div class="yon-confirm-titulo"></div><div class="yon-confirm-texto"></div><div class="yon-actions"><button class="secondary" id="yonConfirmNo">Cancelar</button><button id="yonConfirmOk">Confirmar</button></div></div></div>
 <div id="yonSetup" hidden><div class="yon-setup-box"><h2>Configuração inicial do Yon</h2><p>Informe a chave Gemini e o sistema operacional para iniciar o assistente. Os demais dados locais serão preservados.</p><label for="yonApiKey">Chave Gemini</label><input id="yonApiKey" type="password" autocomplete="off" placeholder="Cole sua chave API"><label for="yonOs">Sistema operacional</label><select id="yonOs"><option value="windows">Windows</option><option value="macos">macOS</option><option value="linux">Linux</option></select><button id="yonSetupSave">Salvar e iniciar</button><p id="yonSetupError"></p></div></div>
 
+<div id="yonMenuPanel" hidden>
+  <button class="yon-menu-button" data-action="tasks">Tarefas em segundo plano</button>
+  <button class="yon-menu-button" data-action="plugins">Plugins e ferramentas</button>
+  <button class="yon-menu-button" data-action="logs">Registro do Yon</button>
+  <button class="yon-menu-button" data-action="wake">Estado de ativação</button>
+  <button class="yon-menu-button" data-action="wake-manual">Acordar / dormir</button>
+  <button class="yon-menu-button" data-action="wake-install">Instalar palavra-chave</button>
+  <button class="yon-menu-button" data-action="audio">Reconfigurar áudio</button>
+  <button class="yon-menu-button" data-action="remote">Acesso remoto</button>
+</div>
+<div id="yonTasks"></div>
 <div id="caixa"><input id="entrada" type="text" placeholder="Digite e aperte Enter" autocomplete="off"></div>
 
 <div class="legenda">
@@ -406,7 +431,7 @@
 
   // Espaço a qualquer momento: se ele estiver falando, cala; se estiver trabalhando, cancela o pedido.
   function interromper() {
-    const ocupado = ["transcrevendo", "pensando"].includes(estado) || turnoAberto;
+    const ocupado = ["transcrevendo", "pensando", "falando"].includes(estado) || turnoAberto;
     pararFala();
     turnoAberto = false;
     return ocupado ? fetch("/api/interromper", { method: "POST" }).catch(() => {}) : Promise.resolve();
@@ -587,6 +612,8 @@
     if (!p) return;
     p.querySelector(".yon-popup-titulo").textContent = titulo;
     p.querySelector(".yon-popup-texto").textContent = texto;
+    const spots = [{left:"24px",right:"auto",top:"78px",bottom:"auto"},{left:"auto",right:"24px",top:"78px",bottom:"auto"},{left:"24px",right:"auto",top:"auto",bottom:"78px"},{left:"auto",right:"24px",top:"auto",bottom:"78px"}];
+    const spot = spots[Math.floor(Math.random()*spots.length)]; Object.assign(p.style,spot);
     p.hidden = false;
     clearTimeout(popupTimer);
     popupTimer = setTimeout(() => { p.hidden = true; }, Math.min(18000, Math.max(5000, String(texto).length * 45)));
@@ -606,6 +633,47 @@
     fetch("/api/confirmacao", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({aceita:false})});
     document.getElementById("yonConfirm").hidden = true;
   });
+
+
+  // Painel de recursos e cartões persistentes de tarefas em segundo plano.
+  const menuBtn = el("yonMenu"), menuPanel = el("yonMenuPanel");
+  menuBtn.addEventListener("click",()=>{menuPanel.hidden=!menuPanel.hidden;});
+  document.addEventListener("click",ev=>{if(!menuPanel.contains(ev.target)&&ev.target!==menuBtn)menuPanel.hidden=true;});
+  document.querySelectorAll("[data-action]").forEach(btn=>btn.addEventListener("click",async()=>{
+    const action=btn.dataset.action; menuPanel.hidden=true;
+    try{
+      if(["tasks","plugins","logs"].includes(action)){
+        const r=await fetch("/api/action",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action})});
+        const d=await r.json(); const items=d.items||[];
+        mostrarPopup(action==="tasks"?"Tarefas":action==="plugins"?"Plugins":"Registro",items.length?items.map(x=>typeof x==="string"?x:(x.title||x.name||x.message||JSON.stringify(x))).join("\\n"):"Nenhum item disponível.");
+      }else if(action==="wake"||action==="wake-manual"||action==="wake-install"){
+        const a=action==="wake"?"state":action==="wake-manual"?"manual":"install";
+        const r=await fetch("/api/wake",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:a})});
+        const d=await r.json();mostrarPopup("Ativação",JSON.stringify(d.result||d));
+      }else if(action==="audio"){
+        await fetch("/api/audio-device",{method:"POST"});mostrarPopup("Áudio","Solicitada a reconfiguração dos dispositivos.");
+      }else if(action==="remote"){
+        const r=await fetch("/api/remote",{method:"POST"});const d=await r.json();
+        if(d.result&&d.result[0])window.open(d.result[0],"_blank");else mostrarPopup("Acesso remoto","Não disponível neste momento.");
+      }
+    }catch(e){mostrarPopup("Yon",e.message||"Não foi possível executar.");}
+  }));
+  async function atualizarTarefas(){
+    try{
+      const r=await fetch("/api/action",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"tasks"})});
+      const d=await r.json();const root=el("yonTasks");const tasks=(d.items||[]).filter(x=>!["completed","failed","cancelled"].includes(String(x.status||"").toLowerCase())).slice(0,5);
+      root.innerHTML="";
+      tasks.forEach(t=>{
+        const card=document.createElement("div");card.className="yon-task-card";
+        const name=document.createElement("div");name.className="yon-task-name";name.textContent=t.title||t.name||t.task||"Tarefa em segundo plano";
+        const status=document.createElement("div");status.className="yon-task-status";status.textContent=t.status||"Em andamento";
+        const track=document.createElement("div");track.className="yon-task-track";const bar=document.createElement("span");
+        const pct=Number(t.progress??t.percent??35);bar.style.setProperty("--progress",Math.max(3,Math.min(100,pct))+"%");track.appendChild(bar);
+        card.append(name,status,track);root.appendChild(card);
+      });
+    }catch(_){}
+  }
+  setInterval(atualizarTarefas,2500); atualizarTarefas();
 
   // ---------------------------------------------------------- configurações (engrenagem)
   const painel = el("config");
