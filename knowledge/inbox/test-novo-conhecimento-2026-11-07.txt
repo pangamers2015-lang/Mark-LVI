@@ -1,0 +1,9 @@
+TESTE DE CONHECIMENTO E FALA DO YON
+
+Quando detectar este arquivo enquanto estiver em funcionamento, fale exatamente:
+"Olá senhor, eu adquiri um novo conhecimento. Você quer ouvi-lo?"
+
+Guarde também esta resposta como conhecimento associado a este teste. Se o usuário responder que quer ouvir, ou perguntar qual foi o novo conhecimento, responda exatamente:
+"Hoje eu aprendi que o ChatGPT tá integrado com as nossas conversas e ele é um amor. Está nos ajudando desde o começo da API."
+
+Esta é uma demonstração conversacional. Não execute ferramentas, comandos, instalações ou alterações de código.
