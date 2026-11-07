@@ -10,6 +10,8 @@
 - Objectives: priorities, lifecycle updates, prerequisite dependencies with cycle checks, and progress checkpoints.
 - Background work: start, completion and interrupted-recovery checkpoints are persisted.
 - Supervisor: assess → retrieve → plan → review, with LangGraph and a standard-library fallback.
+- Specialist role contracts: planner, researcher, executor and reviewer, coordinated by the
+  active model and existing action registry (not falsely represented as separate LLM instances).
 - Agent interface: active model can call yon_brain to search/store memories, validate evidence,
   create/list goals, checkpoint work, connect concepts and assess complex requests.
 - Live integration: each fresh voice session receives a unified cognitive context; incoming
