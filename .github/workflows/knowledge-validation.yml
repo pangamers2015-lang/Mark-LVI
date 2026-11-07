@@ -1,10 +1,11 @@
 name: Yon knowledge validation
 on:
   push:
-    branches: [feature/behavioral-preferences]
+    branches: [main, feature/behavioral-preferences, feature/continuous-knowledge-inbox]
     paths:
       - "knowledge/updates/**"
       - "knowledge/inbox/**"
+      - "docs/YON_GITHUB_KNOWLEDGE_UPDATES.md"
       - "memory/knowledge_updates.py"
       - "memory/github_inbox.py"
       - "memory/cognitive_runtime.py"
