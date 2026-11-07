@@ -2066,6 +2066,7 @@ class JarvisLive:
     async def _receive_audio(self):
         print("[JARVIS] 👂 Recv started")
         out_buf, in_buf = [], []
+        caption_streamed = False
 
         try:
             while True:
@@ -2123,6 +2124,7 @@ class JarvisLive:
                                 self._visemes.feed_text(txt)
                                 if hasattr(self.ui, "show_speech_caption"):
                                     self.ui.show_speech_caption(txt)
+                                    caption_streamed = True
 
                         if sc.input_transcription and sc.input_transcription.text:
                             txt = _clean_transcript(sc.input_transcription.text)
@@ -2137,6 +2139,9 @@ class JarvisLive:
                             # If this turn_complete ends an interrupted response, clear the
                             # flag and skip all further processing for that turn.
                             if self._interrupted:
+                                if caption_streamed and hasattr(self.ui, "finish_speech_caption"):
+                                    self.ui.finish_speech_caption()
+                                caption_streamed = False
                                 self._interrupted = False
                                 in_buf  = []
                                 out_buf = []
@@ -2182,7 +2187,7 @@ class JarvisLive:
                                     }))
                             in_buf = []
 
-                            if out_buf and hasattr(self.ui, "finish_speech_caption"):
+                            if caption_streamed and hasattr(self.ui, "finish_speech_caption"):
                                 self.ui.finish_speech_caption()
                             full_out = " ".join(out_buf).strip()
                             # Second line of defence: even if a repeat slips
@@ -2196,7 +2201,10 @@ class JarvisLive:
                                     self.ui.show_content("RESPOSTA DA PESQUISA", full_out)
                                     self._pending_search_popup_query = None
                                 self._last_out_logged = full_out
-                                self.ui.write_log(f"{self._asst_name}: {full_out}")
+                                # The live caption is already the visible assistant
+                                # message; do not append the same answer a second time.
+                                if not caption_streamed:
+                                    self.ui.write_log(f"{self._asst_name}: {full_out}")
                                 self._session_log.append(f"{self._asst_name}: {full_out}")
                                 record_turn("assistant", full_out)
                                 if self._dashboard:
@@ -2206,6 +2214,7 @@ class JarvisLive:
                                         "ts": datetime.now().isoformat(),
                                     }))
                             out_buf = []
+                            caption_streamed = False
 
                             if self._vision_close_pending:
                                 # This turn_complete IS the vision answer — close camera + release busy flag
