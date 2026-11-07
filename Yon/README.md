@@ -13,6 +13,10 @@ Este diretório é a raiz isolada do novo projeto Yon. O cérebro autônomo aind
 - Interrupção por voz: durante a resposta, `EchoGuard` compara o áudio captado com o áudio reproduzido e `BargeInDetector` exige fala sustentada antes de cortar a resposta. A fala confirmada é então encaminhada ao Gemini; uma pausa curta encerra a captura. Espaço continua disponível como interrupção manual imediata.
 - Reconexão automática da sessão de voz após uma queda.
 
+## Referência e créditos
+
+Esta interface foi desenvolvida como uma implementação independente inspirada e adaptada a partir do projeto **MARK LVI / JARVIS**, de FatihMakes: https://github.com/FatihMakes/Mark-LVI. O repositório de origem é a referência para os componentes de voz e interação examinados; o Yon mantém código, interface e arquitetura próprios. Consulte o repositório original e sua licença (CC BY-NC 4.0) para os termos aplicáveis ao material reutilizado ou adaptado.
+
 ## Componentes de voz extraídos/adaptados
 
 A implementação de origem foi inspecionada em `main.py`, `core/echo.py`, `core/barge_in.py`, `providers/audio.py` e `web/index.html`.
