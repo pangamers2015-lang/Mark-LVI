@@ -10,9 +10,11 @@ from __future__ import annotations
 def _public_result(record: dict) -> str:
     result = str(record.get("result") or "").strip()
     if result.startswith("FCC Cloud completed the task."):
-        marker = "Result:\n"
-        if marker in result:
-            result = result.split(marker, 1)[1].strip()
+        markers = ("Result:\\n", "Result:\n")
+        for marker in markers:
+            if marker in result:
+                result = result.split(marker, 1)[1].strip()
+                break
         else:
             result = ""
     return result[:9000]
