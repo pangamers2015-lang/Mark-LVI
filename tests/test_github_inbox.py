@@ -147,3 +147,53 @@ def test_changed_txt_revision_is_reprocessed_and_important_learning_is_announced
     )
     assert again["ok"] and again["already_processed"] == 1
     assert len(pending_live_speech()) == 1
+
+
+
+def test_changed_revision_does_not_lock_shared_cognitive_database(tmp_path, monkeypatch):
+    from memory import cognitive_runtime
+
+    db_path = tmp_path / "cognitive.sqlite3"
+    monkeypatch.setattr(store, "DB_PATH", db_path)
+    monkeypatch.setattr(cognitive_runtime, "_DB", db_path)
+    monkeypatch.setenv("YON_OBSIDIAN_VAULT", "")
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    note = inbox / "revision.txt"
+    note.write_text("Primeira versão.", encoding="utf-8")
+
+    first = process_inbox(
+        inbox,
+        interpreter=lambda *_: {
+            "kind": "speak_once",
+            "title": "Primeiro",
+            "memory": "Conhecimento inicial.",
+            "speech_text": "Primeira mensagem.",
+        },
+    )
+    assert first["ok"] and first["processed"] == 1
+
+    note.write_text("Versão revisada.", encoding="utf-8")
+    second = process_inbox(
+        inbox,
+        interpreter=lambda *_: {
+            "kind": "knowledge",
+            "title": "Revisão",
+            "memory": "Conhecimento revisado e persistente.",
+        },
+    )
+    assert second["ok"], second
+    assert second["processed"] == 1
+    assert cognitive_runtime.retrieve("revisado", semantic=False)
+
+
+def test_remote_inbox_reports_retry_after_for_github_rate_limit(monkeypatch):
+    monkeypatch.setattr(
+        inbox_module,
+        "_fetch_remote_txt_files",
+        lambda: (_ for _ in ()).throw(inbox_module.GitHubRateLimitError("rate limited", 240)),
+    )
+    result = inbox_module.process_remote_inbox()
+    assert result["ok"] is False
+    assert result["retry_after"] == 240
+    assert "rate limited" in result["errors"][0]
