@@ -21,3 +21,27 @@ Limits and safeguards:
 The existing knowledge/updates/ mechanism remains supported. Approved JSON files are imported locally on cognitive-context build, using stable immutable IDs and idempotent receipts. Fields: id, category, title, content, status=approved; optional evidence. The existing JSON categories remain unchanged.
 
 GitHub Actions validates code and tests only. It does not call the model or write to the user's computer; actual interpretation and persistence happen inside the running local Yon instance.
+
+## Bidirectional shared-folder sync
+
+Yon also synchronizes a dedicated shared workspace in both directions: local
+`knowledge/shared/` to the configured GitHub branch and remote
+`knowledge/shared/` back to the same local folder. This is separate from the
+read-only learning inbox under `knowledge/inbox/`. The monitor checks the
+shared folder every 60 seconds by default (configurable with
+`YON_GITHUB_SYNC_SECONDS`, 30–600 seconds).
+
+For safety, only regular UTF-8 `.txt` and `.md` files up to 256 KB are
+included. Hidden paths, symlinks, binary files, credentials, local databases,
+configuration, and files outside `knowledge/shared/` are excluded. Git does
+not represent empty directories, so a folder is synchronized when it contains
+at least one eligible file. Files are copied atomically on download.
+
+The sync never propagates deletions. A local-only file is uploaded; a
+remote-only file is downloaded. When both sides contain different content and
+there is no known common version, or both sides have changed since the last
+successful sync, Yon reports a conflict and preserves both copies without
+overwriting either. The user can resolve the conflict manually. A fine-grained
+GitHub token with access only to Mark-LVI and repository Contents: Read and
+write is required for uploads; read-only permission is sufficient only for
+downloads. Never put the token in a repository file.
