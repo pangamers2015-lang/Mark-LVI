@@ -42,7 +42,9 @@ TOOL = {
     "name": "background_tasks",
     "description": (
         "Checks background work started by JARVIS. Use action='list' when the user "
-        "asks what tasks are running or their overall status. Use action='get' with "
+        "asks what tasks are running or their overall status. Completed background tasks "
+        "are automatically announced by Yon at the next safe conversational pause. "
+        "Use action='get' with "
         "the exact task_id to retrieve its current status and completed result. "
         "A task ID is returned immediately when long work is started. Never claim "
         "a task is complete until this tool reports completed."
