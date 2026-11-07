@@ -271,10 +271,22 @@
   const dropOverlay = el("yonDropOverlay");
   let dragDepth = 0;
   const temArquivos = (event) => Array.from(event.dataTransfer?.types || []).includes("Files");
+  function categoriaArquivo(file) {
+    const mime = String(file.type || "").toLowerCase();
+    const ext = String(file.name || "").split(".").pop().toLowerCase();
+    if (mime.startsWith("image/")) return "imagem";
+    if (mime === "application/pdf" || ext === "pdf") return "PDF";
+    if (mime.startsWith("audio/")) return "áudio";
+    if (mime.startsWith("video/")) return "vídeo";
+    if (["py","js","ts","jsx","tsx","html","css","json","xml","sql","java","cpp","c","cs","php","go","rs"].includes(ext)) return "código";
+    if (mime.startsWith("text/") || ["txt","md","csv","doc","docx","xls","xlsx","ppt","pptx"].includes(ext)) return "documento";
+    return "arquivo";
+  }
   async function lerEntradaArrastada(entry, caminho, resultado) {
     if (entry.isFile) {
       await new Promise((resolve, reject) => entry.file(file => {
         resultado.files.push({file, path:caminho});
+        resultado.fileDetails.push({name:file.name,kind:categoriaArquivo(file),path:caminho,type:file.type || "",size:file.size});
         resolve();
       }, reject));
       return;
@@ -287,26 +299,32 @@
         children = await new Promise((resolve, reject) => reader.readEntries(resolve, reject));
         for (const child of children) {
           await lerEntradaArrastada(child, caminho + "/" + child.name, resultado);
+          if (resultado.files.length > 300) throw new Error("O limite é de 300 arquivos por envio.");
         }
       } while (children.length);
     }
   }
   async function receberItensArrastados(dataTransfer) {
-    const resultado = {files:[], directories:[], items:[]};
-    const entries = Array.from(dataTransfer.items || [])
-      .filter(item => item.kind === "file")
-      .map(item => item.webkitGetAsEntry ? item.webkitGetAsEntry() : null);
-    if (entries.some(Boolean)) {
-      for (const entry of entries) {
+    const resultado = {files:[], directories:[], items:[], fileDetails:[]};
+    const entries = Array.from(dataTransfer.items || []).filter(item => item.kind === "file");
+    if (entries.some(item => item.webkitGetAsEntry && item.webkitGetAsEntry())) {
+      for (const item of entries) {
+        const entry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
         if (!entry) continue;
-        resultado.items.push({name:entry.name,kind:entry.isDirectory?"pasta":"arquivo",path:entry.name});
         await lerEntradaArrastada(entry, entry.name, resultado);
+        if (entry.isDirectory) resultado.items.push({name:entry.name,kind:"pasta",path:entry.name});
+        else {
+          const detail = resultado.fileDetails.find(x => x.path === entry.name);
+          resultado.items.push({name:entry.name,kind:detail ? detail.kind : "arquivo",path:entry.name,type:detail ? detail.type : ""});
+        }
       }
     } else {
       for (const file of Array.from(dataTransfer.files || [])) {
         const path = file.webkitRelativePath || file.name;
         resultado.files.push({file,path});
-        resultado.items.push({name:file.name,kind:"arquivo",path});
+        const kind = categoriaArquivo(file);
+        resultado.items.push({name:file.name,kind,path,type:file.type || ""});
+        resultado.fileDetails.push({name:file.name,kind,path,type:file.type || "",size:file.size});
       }
     }
     return resultado;
@@ -349,7 +367,7 @@
       novoTurno();
       const form = new FormData();
       form.append("manifest", new Blob([JSON.stringify({
-        items:recebidos.items, directories:recebidos.directories
+        items:recebidos.items, directories:recebidos.directories, fileDetails:recebidos.fileDetails
       })], {type:"application/json"}), "manifest.json");
       for (const item of recebidos.files) form.append("files", item.file, item.path);
       mudarEstado("pensando");
