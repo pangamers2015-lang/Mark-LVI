@@ -1869,11 +1869,11 @@ class JarvisLive:
                 self._background_task_seq += 1
                 task_id = f"BG-{self._background_task_seq:04d}"
                 _task_location = str(args.get("working_directory") or args.get("folder") or "").strip()
-                _task_project = Path(_task_location).name if _task_location else "Projeto Yon"
+                _task_project = Path(_task_location).name if _task_location else "Projeto Ion"
                 _task_title = (
                     "Cloud está codando" if name == "fcc_cloud"
-                    else "Yon está investigando uma solução" if name == "capability_recovery"
-                    else "Yon está trabalhando"
+                    else "Ion está investigando uma solução" if name == "capability_recovery"
+                    else "Ion está trabalhando"
                 )
                 self._background_task_records[task_id] = {
                     "id": task_id,

@@ -1,0 +1,3 @@
+# Requisitos da nova camada Ion. A aplicação base continua em requirements.txt.
+# O Microsoft Agent Framework fornece o runtime de workflows usado pelo supervisor.
+agent-framework>=1.18,<2
