@@ -1,0 +1,44 @@
+name: Ion Windows Validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "ion/**"
+      - "actions/ion_development.py"
+      - "actions/ion_status.py"
+      - "tests/test_ion_core.py"
+      - "requirements-ion.txt"
+      - ".github/workflows/ion-validation.yml"
+      - "main.py"
+      - "ui.py"
+      - "web_ui.py"
+      - "web/index.html"
+  pull_request:
+    paths:
+      - "ion/**"
+      - "actions/ion_development.py"
+      - "actions/ion_status.py"
+      - "tests/test_ion_core.py"
+      - "requirements-ion.txt"
+      - ".github/workflows/ion-validation.yml"
+      - "main.py"
+      - "ui.py"
+      - "web_ui.py"
+      - "web/index.html"
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install Ion runtime test dependencies
+        run: python -m pip install --upgrade pip httpx agent-framework-core
+      - name: Compile the application and Ion modules
+        run: python -m compileall -q ion actions/ion_development.py actions/ion_status.py main.py ui.py web_ui.py
+      - name: Test Ion planner, guards and Microsoft Agent Framework
+        run: python -m unittest discover -s tests -p test_ion_core.py -v
