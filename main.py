@@ -1051,12 +1051,15 @@ class JarvisLive:
                     work_journal.save_task(live_record)
 
                 message = build_task_notification(task)
+                if task.get("name") == "web_search":
+                    self._pending_search_popup_query = task.get("summary") or "Pesquisa concluída"
                 if not message:
                     with self._background_task_lock:
                         live_record = self._background_task_records.get(task_id)
                         if live_record:
                             live_record["notification_status"] = "delivered"
                             work_journal.save_task(live_record)
+                    self._maybe_restart_when_idle()
                     continue
 
                 try:
@@ -1086,6 +1089,7 @@ class JarvisLive:
                             live_record["notification_status"] = "delivered"
                             work_journal.save_task(live_record)
                     print(f"[Notifications] Announced background task {task_id}.")
+                    self._maybe_restart_when_idle()
                 except asyncio.CancelledError:
                     with self._background_task_lock:
                         live_record = self._background_task_records.get(task_id)
