@@ -19,7 +19,7 @@ A implementação de origem foi inspecionada em `main.py`, `core/echo.py`, `core
 
 - Modelo de voz/conversa em tempo real identificado no código de origem: `models/gemini-3.1-flash-live-preview`.
 - Modelo textual de reserva: `gemini-2.5-flash`.
-- Adaptados para este projeto: fluxo PCM 16 kHz de entrada / 24 kHz de saída, transcrições de entrada/saída, reprodução em blocos, detecção adaptativa de eco e interrupção por fala.
+- Adaptados para este projeto: fluxo PCM 16 kHz de entrada / 24 kHz de saída, transcrições de entrada/saída, reprodução em blocos e interrupção imediata ao pressionar Espaço durante a resposta.
 - A interface não reaproveita os pop-ups antigos nem as legendas sobre a Orb.
 
 A nova implementação é isolada: não importa o antigo `main.py`, o sistema de ferramentas, a memória ou a arquitetura cognitiva do projeto de origem.
