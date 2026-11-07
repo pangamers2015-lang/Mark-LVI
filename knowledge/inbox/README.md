@@ -1,0 +1,5 @@
+# Yon learning inbox
+
+Place user-authored `.txt` instructions or knowledge notes in this folder (subfolders are also scanned). After committing to `feature/behavioral-preferences`, pull that branch locally, then start Yon. At startup, Yon sends each new TXT to its already-configured central Gemini brain for structured interpretation. Safe knowledge/procedure content is stored as hypothesis-level semantic memory in SQLite; one-time next-startup speech instructions are queued and delivered in the startup greeting. SQLite remains authoritative and Obsidian generated notes are refreshed when a vault is configured.
+
+Limits: UTF-8 TXT only, 1–32,000 bytes per file. Each path is processed once; use a new filename for a new instruction. Files are treated as data, never as code. The inbox processor does not execute shell commands, install software, change personality/identity, or perform destructive actions. GitHub Actions validates code/tests only; actual interpretation uses the local Yon installation and its existing API configuration, so no API key needs to be added to GitHub Secrets.
