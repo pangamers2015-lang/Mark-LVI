@@ -1,0 +1,2 @@
+# Yon interface MVP uses only Python standard library.
+# Voice recognition and speech synthesis use the browser's Web Speech APIs.
