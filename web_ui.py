@@ -26,11 +26,32 @@ class _EventHub:
         self._lock = threading.Lock()
         self._clients = []
         self._last_state = {"tipo": "estado", "estado": "iniciando"}
+        # Keep the latest spoken answer so a browser that connects late (or
+        # reconnects) can recover captions emitted before its SSE subscription.
+        self._last_caption = ""
+        self._caption_active = False
 
     def emit(self, event):
-        if event.get("tipo") == "estado":
-            self._last_state = event
+        kind = event.get("tipo")
         with self._lock:
+            if kind == "estado":
+                self._last_state = event
+            elif kind == "legenda":
+                chunk = str(event.get("texto") or "").strip()
+                if chunk:
+                    if not self._caption_active:
+                        self._last_caption = ""
+                        start_event = {"tipo": "legenda_inicio"}
+                        for q in list(self._clients):
+                            try:
+                                q.put_nowait(start_event)
+                            except Exception:
+                                pass
+                    self._last_caption = (self._last_caption + " " + chunk).strip()
+                    self._caption_active = True
+            elif kind == "legenda_fim":
+                self._caption_active = False
+
             for q in list(self._clients):
                 try:
                     q.put_nowait(event)
@@ -43,6 +64,10 @@ class _EventHub:
         with self._lock:
             self._clients.append(q)
             q.put(self._last_state)
+            if self._last_caption:
+                q.put({"tipo": "legenda_snapshot", "texto": self._last_caption})
+                if not self._caption_active:
+                    q.put({"tipo": "legenda_fim"})
         return q
 
     def unsubscribe(self, q):
