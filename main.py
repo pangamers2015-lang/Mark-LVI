@@ -60,6 +60,7 @@ from memory.memory_manager import (
 from memory.learning_store import (
     learn_from_user_text, format_learning_for_prompt,
 )
+from memory.continuity_store import record_turn, format_recent_context
 
 # The file-backed tools (open_app, web_search, browser_control, …) are no longer
 # imported or declared here — they self-describe via a TOOL dict in their own
@@ -1375,6 +1376,7 @@ class JarvisLive:
         memory     = load_memory()
         mem_str    = format_memory_for_prompt(memory)
         learning_str = format_learning_for_prompt()
+        continuity_str = format_recent_context()
         sys_prompt = _load_system_prompt()
 
         # Use the host's local timezone and include an unambiguous ISO timestamp.
@@ -1461,6 +1463,8 @@ class JarvisLive:
             parts.append(mem_str)
         if learning_str:
             parts.append(learning_str)
+        if continuity_str:
+            parts.append(continuity_str)
         parts.append(sys_prompt)
 
         cfg = dict(
@@ -2116,6 +2120,7 @@ class JarvisLive:
                                 self._last_out_logged = ""   # new exchange
                                 self.ui.write_log(f"You: {full_in}")
                                 self._session_log.append(f"User: {full_in}")
+                                record_turn("user", full_in)
 
                                 # Persist clear, explicit startup preferences locally.
                                 # This deterministic path does not depend on the model
@@ -2160,6 +2165,7 @@ class JarvisLive:
                                 self._last_out_logged = full_out
                                 self.ui.write_log(f"{self._asst_name}: {full_out}")
                                 self._session_log.append(f"{self._asst_name}: {full_out}")
+                                record_turn("assistant", full_out)
                                 if self._dashboard:
                                     asyncio.create_task(self._dashboard.broadcast({
                                         "type": "log", "speaker": "jarvis",
