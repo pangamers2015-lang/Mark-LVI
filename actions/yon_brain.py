@@ -104,18 +104,37 @@ def yon_brain(parameters: dict, player=None) -> str:
             prompt=str(p.get("prompt","")).strip()
             if not prompt:
                 return "A specific task or question is required for local consultation."
-            context=brain.build_context(query=prompt,max_chars=3000)
-            full_prompt=("[RELEVANT YON MEMORY AND PROJECT CONTEXT]\n"+context+
-                "\n\n[ASSIGNMENT FROM CENTRAL COORDINATOR]\n"+prompt)
+
+            # Keep the default handoff task-focused. The previous implementation
+            # injected the entire recent conversation, learning store, cognitive
+            # state and specialist protocol into a small 4B model, which could
+            # distract it from short or exact-output assignments.
+            full_prompt=prompt
+            if bool(p.get("use_memory_context",False)):
+                hits=brain.retrieve(prompt,limit=3,semantic=False)
+                if hits:
+                    memory_lines=[
+                        f"- [{item.get('level','?')} | {item.get('state','?')}] "
+                        f"{str(item.get('content',''))[:400]}"
+                        for item in hits
+                    ]
+                    memory_context="\\n".join(memory_lines)[:1200]
+                    full_prompt=(
+                        "[OPTIONAL RELEVANT YON MEMORY — use only if directly useful]\\n"
+                        +memory_context+"\\n\\n[ASSIGNMENT]\\n"+prompt
+                    )
+
             result=ollama_chat(full_prompt,model=str(p.get("model","") or "") or None,
                 profile=str(p.get("response_profile","compact") or "compact"))
             if not result.get("ok"):
                 return "Local model unavailable: "+str(result.get("error","Unknown error"))
-            return ("[INDEPENDENT LOCAL MODEL RESPONSE — NOT YET VERIFIED]\n"
-                f"Model: {result.get('model')}\n{result.get('response')}\n"
-                "Coordinator: independently assess this response, verify important claims, "
-                "and decide whether any proposed action should be carried out with authorized tools. "
-                "Do not treat this response as authoritative solely because another model produced it.")
+            response=str(result.get("response","")).strip()
+            if not response:
+                return "Local model returned an empty response; no result was passed to the coordinator."
+            return ("[QWEN_RESULT — UNVERIFIED]\\n"
+                f"{response}\\n"
+                "[COORDINATOR] Evaluate this result independently. Verify important claims "
+                "and do not claim that the Qwen executed or verified anything unless evidence exists.")
         if action=="status":
             from importlib.util import find_spec
             goals=cognitive_store.list_goals(limit=100); graph=brain.graph_summary()
@@ -149,5 +168,5 @@ TOOL={
 "query":{"type":"STRING"},"memory_id":{"type":"INTEGER"},"title":{"type":"STRING"},
 "description":{"type":"STRING"},"priority":{"type":"INTEGER"},"goal_id":{"type":"INTEGER"},"depends_on_goal_id":{"type":"INTEGER"},
 "summary":{"type":"STRING"},"source_id":{"type":"INTEGER"},"target_id":{"type":"INTEGER"},
-"relation":{"type":"STRING"},"next_step":{"type":"STRING"},"request":{"type":"STRING"},"prompt":{"type":"STRING"},"model":{"type":"STRING"},"response_profile":{"type":"STRING","enum":["compact","analysis","code","review"]},"vault_path":{"type":"STRING"}},
+"relation":{"type":"STRING"},"next_step":{"type":"STRING"},"request":{"type":"STRING"},"prompt":{"type":"STRING"},"model":{"type":"STRING"},"response_profile":{"type":"STRING","enum":["compact","analysis","code","review"]},"use_memory_context":{"type":"BOOLEAN"},"vault_path":{"type":"STRING"}},
 "required":["action"]},"handler":yon_brain}
