@@ -159,7 +159,7 @@ def process_inbox(root=None, interpreter=None) -> dict:
                     conn.execute(
                         "INSERT INTO github_inbox_receipts(source_path,digest,memory_id,processed_at) VALUES(?,?,?,?)",
                         (rel, digest, int(memory_id),
-                         __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat()))
+                         datetime.now(timezone.utc).isoformat()))
                     conn.commit()
                     counts["processed"] += 1
                 except Exception as exc:
@@ -173,7 +173,7 @@ def process_inbox(root=None, interpreter=None) -> dict:
 
 def pending_startup_directives(limit=MAX_STARTUP_DIRECTIVES) -> list[dict]:
     try:
-        with _connect() as conn:
+        with closing(_connect()) as conn, conn:
             rows = conn.execute(
                 "SELECT id,instruction FROM startup_directives WHERE status='pending' "
                 "ORDER BY id LIMIT ?", (max(1, min(int(limit), 10)),)).fetchall()
@@ -189,7 +189,7 @@ def mark_startup_delivered(directive_ids) -> int:
     placeholders = ",".join("?" for _ in ids)
     try:
         from datetime import datetime, timezone
-        with _connect() as conn:
+        with closing(_connect()) as conn, conn:
             cur = conn.execute(
                 f"UPDATE startup_directives SET status='delivered',delivered_at=? "
                 f"WHERE status='pending' AND id IN ({placeholders})",
