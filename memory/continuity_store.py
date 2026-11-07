@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import sqlite3
 import threading
+from contextlib import closing
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -46,17 +47,18 @@ def record_turn(role: str, content: str) -> bool:
     created_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     try:
         with _LOCK:
-            with _connect() as conn:
-                conn.execute(
-                    "INSERT INTO conversation_turns "
-                    "(session_id, role, content, created_at) VALUES (?, ?, ?, ?)",
-                    (_SESSION_ID, role, text, created_at),
-                )
-                conn.execute(
-                    "DELETE FROM conversation_turns WHERE id NOT IN "
-                    "(SELECT id FROM conversation_turns ORDER BY id DESC LIMIT ?)",
-                    (_MAX_TURNS,),
-                )
+            with closing(_connect()) as conn:
+                with conn:
+                    conn.execute(
+                        "INSERT INTO conversation_turns "
+                        "(session_id, role, content, created_at) VALUES (?, ?, ?, ?)",
+                        (_SESSION_ID, role, text, created_at),
+                    )
+                    conn.execute(
+                        "DELETE FROM conversation_turns WHERE id NOT IN "
+                        "(SELECT id FROM conversation_turns ORDER BY id DESC LIMIT ?)",
+                        (_MAX_TURNS,),
+                    )
         return True
     except sqlite3.Error as exc:
         # Continuity is important, but a storage failure must never kill voice I/O.
@@ -68,7 +70,7 @@ def format_recent_context(limit: int = 16, max_chars: int = 6000) -> str:
     """Return recent completed turns in chronological order for session recovery."""
     try:
         with _LOCK:
-            with _connect() as conn:
+            with closing(_connect()) as conn:
                 rows = conn.execute(
                     "SELECT role, content, created_at FROM conversation_turns "
                     "ORDER BY id DESC LIMIT ?",
@@ -88,7 +90,7 @@ def format_recent_context(limit: int = 16, max_chars: int = 6000) -> str:
     )
     selected = []
     used = len(header) + 1
-    for role, content, created_at in reversed(rows):
+    for role, content, created_at in rows:  # newest first; preserve the freshest context
         line = f"{str(role).upper()} ({created_at}): {content}"
         if used + len(line) + 1 > max(500, int(max_chars)):
             remaining = max(0, int(max_chars) - used - 1)
@@ -100,4 +102,5 @@ def format_recent_context(limit: int = 16, max_chars: int = 6000) -> str:
 
     if not selected:
         return ""
+    selected.reverse()
     return header + "\n" + "\n".join(selected) + "\n"
