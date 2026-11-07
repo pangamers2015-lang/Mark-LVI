@@ -265,7 +265,7 @@ class _Handler(BaseHTTPRequestHandler):
         try:
             while True:
                 try:
-                    item = q.get(timeout=15)
+                    item = q.get(timeout=2)
                     payload = "data: " + json.dumps(item, ensure_ascii=False, default=str) + "\n\n"
                 except Exception:
                     payload = ": ping\n\n"
