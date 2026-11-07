@@ -49,3 +49,6 @@ desktop.ini
 logs/
 downloads/
 screenshots/
+
+# Yon autonomous capability-development sandboxes (local runtime data)
+.yon_capability_lab/
