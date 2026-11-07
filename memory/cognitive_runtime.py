@@ -7,7 +7,7 @@ from pathlib import Path
 from memory import cognitive_store as store
 
 _DB = Path(__file__).resolve().parent / "cognitive.sqlite3"
-_LOCK = threading.RLock()
+_LOCK = store._LOCK  # one in-process lock shared with the foundational cognitive store
 _EMBEDDER = None
 _EMBEDDER_ERROR = ""
 _MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
@@ -17,8 +17,10 @@ def _now():
 
 def _db():
     _DB.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(_DB), timeout=15)
-    conn.execute("PRAGMA busy_timeout=15000")
+    conn = sqlite3.connect(str(_DB), timeout=30)
+    conn.execute("PRAGMA busy_timeout=30000")
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.executescript("""
     CREATE TABLE IF NOT EXISTS memory_relations(
