@@ -2763,10 +2763,12 @@ class JarvisLive:
         )
         last_error = ""
         first_poll = True
+        poll_delay = GITHUB_POLL_SECONDS
+        rate_limit_backoff = GITHUB_POLL_SECONDS
         print(f"[YonInbox] Live GitHub monitor active (every {GITHUB_POLL_SECONDS}s).")
         while True:
             if not first_poll:
-                await asyncio.sleep(GITHUB_POLL_SECONDS)
+                await asyncio.sleep(poll_delay)
             first_poll = False
             if not self.session:
                 continue
@@ -2778,8 +2780,18 @@ class JarvisLive:
                         print(f"[YonInbox] GitHub polling issue: {error}")
                         self.ui.write_log("SYS: Monitor de aprendizado do GitHub temporariamente indisponível.")
                     last_error = error
+                    retry_after = int(result.get("retry_after") or 0)
+                    if retry_after:
+                        poll_delay = max(retry_after, GITHUB_POLL_SECONDS)
+                        rate_limit_backoff = poll_delay
+                        print(f"[YonInbox] Pausing GitHub polling for {poll_delay}s to respect API limits.")
+                    else:
+                        rate_limit_backoff = min(max(GITHUB_POLL_SECONDS, rate_limit_backoff * 2), 900)
+                        poll_delay = rate_limit_backoff
                 else:
                     last_error = ""
+                    rate_limit_backoff = GITHUB_POLL_SECONDS
+                    poll_delay = GITHUB_POLL_SECONDS
                 if result.get("processed"):
                     count = int(result["processed"])
                     print(f"[YonInbox] Learned {count} new TXT file(s) from GitHub.")
