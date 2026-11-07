@@ -15,6 +15,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
+from contextlib import closing
 from pathlib import Path
 
 from memory import cognitive_store as store
@@ -180,8 +181,7 @@ def sync_shared_folder(force: bool = False) -> dict:
     try:
         local = _local_files()
         remote = _remote_files()
-        with store._LOCK:
-            with _db() as conn:
+        with store._LOCK, closing(_db()) as conn:
                 state = {row[0]: (row[1], row[2]) for row in conn.execute(
                     "SELECT path,local_digest,remote_sha FROM github_shared_sync_state"
                 ).fetchall()}
@@ -234,8 +234,7 @@ def sync_shared_folder(force: bool = False) -> dict:
                 local_raw = local.get(relative)
                 local_digest = hashlib.sha256(local_raw).hexdigest() if local_raw else ""
             if remote_sha and local_digest:
-                with store._LOCK:
-                    with _db() as conn:
+                with store._LOCK, closing(_db()) as conn:
                         conn.execute(
                             "INSERT INTO github_shared_sync_state(path,local_digest,remote_sha,synced_at) "
                             "VALUES(?,?,?,?) ON CONFLICT(path) DO UPDATE SET "
