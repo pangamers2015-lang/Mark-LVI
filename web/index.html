@@ -198,7 +198,9 @@
     <div id="listaVozes"></div>
     <div class="config-secao"><span>Velocidade da fala</span><span id="velValor"></span></div>
     <input id="velocidade" class="velocidade" type="range" min="0.8" max="1.2" step="0.05" aria-label="Velocidade da fala">
-    <div class="config-nota">Toque numa voz pra ouvir e escolher. Vale a partir da próxima resposta.</div>
+    <div class="config-nota">O Yon utiliza o mecanismo de voz configurado no próprio backend. Você pode solicitar a reconstrução da sessão de voz ou reconfigurar os dispositivos sem trocar de interface.</div>
+    <button id="yonReloadVoice" class="config-fechar" style="width:100%;height:auto;padding:12px;border:1px solid var(--linha);border-radius:8px;margin-top:12px">Recarregar sessão de voz</button>
+    <button id="yonAudioDevices" class="config-fechar" style="width:100%;height:auto;padding:12px;border:1px solid var(--linha);border-radius:8px;margin-top:8px">Reconfigurar dispositivos de áudio</button>
   </div>
 </div>
 
@@ -715,6 +717,9 @@
   function desenharVozes() {
     const lista = el("listaVozes");
     lista.innerHTML = "";
+    if (!config.vozes || !config.vozes.length) {
+      lista.textContent = "A seleção de voz é administrada pelos provedores ativos do Yon.";
+    }
     ["masculina", "feminina"].forEach((genero) => {
       const vozes = config.vozes.filter((v) => v.genero === genero);
       if (!vozes.length) return;
@@ -774,6 +779,14 @@
 
   function fecharConfig() { painel.hidden = true; }
 
+  el("yonReloadVoice").addEventListener("click", async () => {
+    try { await fetch("/api/config", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({voz:"reload"})}); avisar("Solicitei a reconstrução da sessão de voz."); }
+    catch (_) { avisar("Não consegui reconfigurar a voz."); }
+  });
+  el("yonAudioDevices").addEventListener("click", async () => {
+    try { await fetch("/api/audio-device", {method:"POST"}); avisar("Solicitei a reconfiguração dos dispositivos de áudio."); }
+    catch (_) { avisar("Não consegui reconfigurar o áudio."); }
+  });
   el("engrenagem").addEventListener("click", abrirConfig);
   el("fecharConfig").addEventListener("click", fecharConfig);
   painel.addEventListener("click", (ev) => { if (ev.target === painel) fecharConfig(); });
