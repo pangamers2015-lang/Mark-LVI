@@ -36,7 +36,7 @@
   <div class="settings-top"><span>Configurações</span><button class="iconbtn" id="closeSettings">×</button></div>
   <label for="apiKey">Chave da API Gemini</label><input id="apiKey" type="password" autocomplete="off" placeholder="Cole sua chave API">
   <button class="primary" id="saveKey">Salvar chave</button>
-  <div class="note">A chave fica salva localmente em Yon/config/api_key.json. Voz em tempo real: Gemini Live; conversa digitada: Gemini 2.5 Flash.</div>
+  <div class="note">A chave fica salva localmente em Yon/config/api_key.json. Voz e chat usam Gemini Live quando conectado; o modo textual de reserva usa Gemini 2.5 Flash.</div>
   <div class="note" id="voiceSupport">Voz: verificando suporte do navegador…</div>
  </div>
 </div>
@@ -47,15 +47,27 @@ const $=id=>document.getElementById(id), canvas=$("scene"),ctx=canvas.getContext
 let w=0,h=0,dpr=1,tick=0,voiceActive=false,speaking=false,selectedFile=null,requestBusy=false,lastTranscriptNode=null,activeTranscript={user:null,yon:null};
 function resize(){dpr=Math.min(devicePixelRatio||1,2);w=innerWidth;h=innerHeight;canvas.width=w*dpr;canvas.height=h*dpr;canvas.style.width=w+"px";canvas.style.height=h+"px";ctx.setTransform(dpr,0,0,dpr,0,0)}
 addEventListener("resize",resize);resize();
+const orbPoints=[];
+for(let i=0;i<2400;i++){const y=1-(i/2399)*2;const radius=Math.sqrt(1-y*y);const angle=i*2.399963229728653;orbPoints.push([Math.cos(angle)*radius,y,Math.sin(angle)*radius,Math.random()*Math.PI*2])}
+let orbLevel=0,orbRotation=0,orbSpeed=.0024;
 function orb(){
- tick+=.012;ctx.clearRect(0,0,w,h);const cx=w*.5,cy=h*.46,r=Math.min(w,h)*.205;
- const glow=ctx.createRadialGradient(cx,cy,4,cx,cy,r*1.8);glow.addColorStop(0,"rgba(94,220,205,.12)");glow.addColorStop(.55,"rgba(44,126,121,.055)");glow.addColorStop(1,"rgba(0,0,0,0)");ctx.fillStyle=glow;ctx.fillRect(cx-r*2,cy-r*2,r*4,r*4);
- const pulse=1+Math.sin(tick*2.2)*.018+(speaking?.025:0)+(voiceActive?.012:0);
- for(let ring=0;ring<5;ring++){ctx.beginPath();ctx.ellipse(cx,cy,r*(.7+ring*.12)*pulse,r*(.83+ring*.085)*pulse,Math.sin(tick*.3)*.08,0,Math.PI*2);ctx.strokeStyle="rgba(145,235,225,"+(.12-ring*.017)+")";ctx.lineWidth=1;ctx.stroke()}
- for(let i=0;i<9;i++){const a=tick*.22+i*Math.PI*2/9;const x=cx+Math.cos(a)*r*.88,y=cy+Math.sin(a)*r*.78;ctx.beginPath();ctx.arc(x,y,1.5+(i%3)*.4,0,Math.PI*2);ctx.fillStyle="rgba(188,255,245,.6)";ctx.shadowBlur=12;ctx.shadowColor="#74dfd4";ctx.fill();ctx.shadowBlur=0}
- const core=ctx.createRadialGradient(cx-r*.22,cy-r*.28,2,cx,cy,r*.78);core.addColorStop(0,"rgba(235,255,251,.19)");core.addColorStop(.3,"rgba(121,218,208,.09)");core.addColorStop(.72,"rgba(47,130,126,.035)");core.addColorStop(1,"rgba(2,10,12,0)");ctx.fillStyle=core;ctx.beginPath();ctx.ellipse(cx,cy,r*.72*pulse,r*.84*pulse,0,0,Math.PI*2);ctx.fill();
- ctx.beginPath();ctx.ellipse(cx,cy,r*.72*pulse,r*.84*pulse,0,0,Math.PI*2);ctx.strokeStyle="rgba(188,255,248,.42)";ctx.lineWidth=1.2;ctx.shadowBlur=20;ctx.shadowColor="#62cfc4";ctx.stroke();ctx.shadowBlur=0;
- requestAnimationFrame(orb)
+ tick+=.016;
+ const current=document.body.dataset.state||"idle";
+ let target=current==="listening"?.12+.035*Math.sin(tick*8):current==="speaking"?.19+.08*Math.sin(tick*5):current==="thinking"?.16+.1*Math.sin(tick*3.4):.04+.03*Math.sin(tick*1.2);
+ orbLevel+=(target-orbLevel)*.2;
+ const speedTarget=current==="thinking"?.014:current==="speaking"?.006:.0024;
+ orbSpeed+=(speedTarget-orbSpeed)*.04;orbRotation+=orbSpeed;
+ ctx.clearRect(0,0,w,h);
+ const cx=w/2,cy=h*.42,R=Math.min(w,h)*.2*(1+orbLevel*.3);
+ const glow=ctx.createRadialGradient(cx,cy,R*.05,cx,cy,R*2.1);
+ glow.addColorStop(0,"rgba(255,255,255,"+(.09+orbLevel*.22)+")");
+ glow.addColorStop(.4,"rgba(255,255,255,"+(.025+orbLevel*.05)+")");
+ glow.addColorStop(1,"rgba(255,255,255,0)");
+ ctx.globalAlpha=1;ctx.fillStyle=glow;ctx.fillRect(0,0,w,h);
+ ctx.fillStyle="#fff";const cr=Math.cos(orbRotation),sr=Math.sin(orbRotation),inc=.42,ci=Math.cos(inc),si=Math.sin(inc);
+ const force=current==="speaking"||current==="listening"?.6:.35;
+ for(let i=0;i<orbPoints.length;i++){const p=orbPoints[i];const wave=1+orbLevel*force*Math.sin(p[3]+tick*6+p[1]*5);const x=p[0]*wave,y=p[1]*wave,z=p[2]*wave;const x1=x*cr+z*sr,z1=-x*sr+z*cr;const y1=y*ci-z1*si,z2=y*si+z1*ci;const depth=(z2+1.3)/2.6;const scale=1.4/(1.9-z2*.5);const size=(.55+1.35*depth)*(1+orbLevel*.35);ctx.globalAlpha=Math.max(.04,Math.min(1,.06+.9*depth*depth));ctx.fillRect(cx+x1*R*scale-size/2,cy+y1*R*scale-size/2,size,size)}
+ ctx.globalAlpha=1;requestAnimationFrame(orb)
 }requestAnimationFrame(orb);
 function toast(s){$("toast").textContent=s;$("toast").classList.add("show");setTimeout(()=>$("toast").classList.remove("show"),2600)}
 function addMessage(text,who){const d=document.createElement("div");d.className="msg "+who;d.textContent=text;$("messages").appendChild(d);$("messages").scrollTop=$("messages").scrollHeight;return d}
@@ -87,7 +99,7 @@ $("orbHint").textContent="T · abrir conversa  /  clique na Orb para iniciar a v
 canvas.addEventListener("click",()=>{if(voiceActive)stopVoice();else startVoice()});
 const events=new EventSource("/api/events");
 events.onmessage=e=>{try{const d=JSON.parse(e.data);
- if(d.type==="voice_state"){voiceActive=!["stopped","idle"].includes(d.state);speaking=d.state==="speaking";state(d.state==="connecting"?"thinking":d.state==="speaking"?"speaking":d.state==="listening"?"listening":"idle")}
+ if(d.type==="voice_state"){voiceActive=!["stopped","idle"].includes(d.state);speaking=d.state==="speaking";state(d.state==="connecting"||d.state==="reconnecting"?"thinking":d.state==="speaking"?"speaking":d.state==="listening"?"listening":"idle")}
  else if(d.type==="voice_error"){toast(d.text||"Falha na conexão de voz.");state("idle")}
  else if(d.type==="transcript"){const who=d.speaker==="user"?"user":"yon";const last=$("messages").lastElementChild;if(who==="user"&&last&&last.classList.contains("user")&&last.textContent.trim()===d.text.trim()){activeTranscript.user=last}else if(!activeTranscript[who]){activeTranscript[who]=addMessage(d.text,who)}else{activeTranscript[who].textContent+=" "+d.text;$("messages").scrollTop=$("messages").scrollHeight}lastTranscriptNode=activeTranscript[who]}
  else if(d.type==="turn_complete"){lastTranscriptNode=null;activeTranscript={user:null,yon:null}}
