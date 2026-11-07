@@ -39,6 +39,9 @@ def yon_brain(parameters: dict, player=None) -> str:
         if action=="depend":
             ok=brain.add_goal_dependency(int(p.get("goal_id",0)),int(p.get("depends_on_goal_id",0)))
             return "Goal dependency saved." if ok else "Dependency rejected: verify goal IDs and ensure the dependency graph has no cycle."
+        if action=="index":
+            ok=brain.index_memory(int(p.get("memory_id",0)))
+            return "Memory indexed for semantic retrieval." if ok else "Semantic indexing unavailable or failed; install the optional embedding dependencies."
         if action=="consolidate":
             ok=brain.consolidate_memory(int(p.get("memory_id",0)),str(p.get("evidence","")))
             return "Confirmed memory consolidated." if ok else "Only a confirmed memory with explicit evidence can be consolidated."
@@ -70,7 +73,7 @@ TOOL={
 "to inspect the brain."),
 "tier":"core","brief":"Stores and retrieves memories, validates evidence, and tracks objectives/checkpoints.",
 "parameters":{"type":"OBJECT","properties":{
-"action":{"type":"STRING","enum":["status","remember","search","validate","goal_add","goal_list","checkpoint","depend","consolidate","relate","reflect"]},
+"action":{"type":"STRING","enum":["status","remember","search","validate","goal_add","goal_list","checkpoint","depend","index","consolidate","relate","reflect"]},
 "content":{"type":"STRING"},"level":{"type":"STRING","enum":["working","episodic","semantic","consolidated"]},
 "source":{"type":"STRING"},"state":{"type":"STRING"},"evidence":{"type":"STRING"},
 "query":{"type":"STRING"},"memory_id":{"type":"INTEGER"},"title":{"type":"STRING"},
