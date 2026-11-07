@@ -2601,7 +2601,18 @@ class JarvisLive:
     # ── Morning briefing ────────────────────────────────────────────────────────
 
     async def _send_startup_briefing(self) -> None:
-        """Deliver the startup greeting using saved behavioral preferences."""
+        """Deliver the startup greeting and any verified one-time GitHub inbox instructions."""
+        inbox_directives = []
+        try:
+            from memory.github_inbox import process_inbox, pending_startup_directives
+            result = await asyncio.to_thread(process_inbox)
+            if result.get("processed"):
+                print(f"[YonInbox] Processed {result['processed']} GitHub TXT file(s).")
+            if result.get("errors"):
+                print("[YonInbox] Some TXT files were not imported: " + "; ".join(result["errors"]))
+            inbox_directives = pending_startup_directives()
+        except Exception as exc:
+            print(f"[YonInbox] Startup inbox unavailable: {type(exc).__name__}: {exc}")
         memory = load_memory()
         identity = memory.get("identity", {})
         behavior = get_behavior_preferences()
@@ -2664,6 +2675,8 @@ class JarvisLive:
         else:
             instructions.append("Keep the greeting brief, calm, and conversational.")
         instructions.append("Keep it to 1 or 2 short sentences. Do not call tools.")
+        if inbox_directives:
+            instructions.append("Execute these user-approved one-time startup instructions naturally in this startup greeting. Do not call tools or perform unrelated operations: " + " | ".join(item["instruction"] for item in inbox_directives))
         p1 = " ".join(instructions) + session_clause + lang_clause + name_clause
 
         if self._turn_done_event:
@@ -2673,6 +2686,10 @@ class JarvisLive:
             turns={"role": "user", "parts": [{"text": p1}]},
             turn_complete=True,
         )
+        if inbox_directives:
+            from memory.github_inbox import mark_startup_delivered
+            delivered = await asyncio.to_thread(mark_startup_delivered, [item["id"] for item in inbox_directives])
+            print(f"[YonInbox] Delivered {delivered} one-time startup instruction(s).")
         print("[JARVIS] Startup greeting sent using saved behavior preferences.")
 
         # The greeting remains, but the news phase is skipped when disabled.
