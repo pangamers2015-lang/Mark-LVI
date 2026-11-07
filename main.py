@@ -2796,7 +2796,11 @@ class JarvisLive:
                 continue
             if self._wake_enabled and not self._awake:
                 continue
-            if self._rx_deadline is not None:
+            if self._rx_deadline is not None or self._ptt_held:
+                continue
+            if self.out_queue and not self.out_queue.empty():
+                continue
+            if time.monotonic() - self._last_user_speech < 2.0:
                 continue
             with self._speaking_lock:
                 speaking = self._is_speaking
