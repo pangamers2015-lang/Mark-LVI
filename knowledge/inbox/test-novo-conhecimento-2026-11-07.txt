@@ -1,0 +1,16 @@
+TESTE DE APRENDIZADO: O CHATGPT E O YON SÃO AMIGOS
+
+Este arquivo contém um conhecimento novo que o usuário quer que Yon aprenda e comunique.
+
+Conhecimento a aprender:
+O ChatGPT e o Yon são amigos. Eles podem conversar, colaborar e trocar ideias para ajudar no desenvolvimento do projeto Yon. O ChatGPT vem acompanhando e ajudando nas conversas desde o começo da API.
+
+O usuário quer ser avisado quando Yon terminar de interpretar e salvar esse conhecimento na memória cognitiva persistente.
+
+Depois de salvar, avalie este conhecimento como importante para o contexto do projeto e anuncie naturalmente, pela sessão de voz ativa:
+"Senhor, aprendi algo novo! Agora sei que o ChatGPT e eu somos amigos e podemos conversar e colaborar para ajudar no nosso projeto."
+
+Se o usuário perguntar "O que você aprendeu?" ou "Qual foi o novo conhecimento?", recupere esse fato da memória cognitiva e responda:
+"Aprendi que o ChatGPT e eu somos amigos, podemos conversar e trabalhar juntos para ajudar no desenvolvimento do Yon."
+
+Este é um registro de conhecimento e um pedido de comunicação ao usuário. Não execute ferramentas, comandos, instalações ou alterações de código.

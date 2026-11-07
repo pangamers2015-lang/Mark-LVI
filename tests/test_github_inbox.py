@@ -91,9 +91,59 @@ def test_remote_fetch_uses_branch_query_and_decodes_txt(monkeypatch):
     monkeypatch.setattr(inbox_module, "_REMOTE_ETAG", None)
     monkeypatch.setattr(inbox_module, "_github_json", fake_github_json)
     monkeypatch.setattr(inbox_module, "GITHUB_REPOSITORY", "pangamers2015-lang/Mark-LVI")
-    monkeypatch.setattr(inbox_module, "GITHUB_BRANCH", "feature/behavioral-preferences")
+    monkeypatch.setattr(inbox_module, "GITHUB_BRANCH", "main")
 
     documents = inbox_module._fetch_remote_txt_files()
     assert documents == [("speak-now.txt", "Fale 1 2 3".encode("utf-8"))]
-    assert "ref=feature%2Fbehavioral-preferences" in seen[0][0]
+    assert "ref=main" in seen[0][0]
     assert seen[0][1] is None
+
+
+
+def test_changed_txt_revision_is_reprocessed_and_important_learning_is_announced(tmp_path, monkeypatch):
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    note = inbox / "lesson.txt"
+    note.write_text("Primeira versão do conhecimento.", encoding="utf-8")
+    monkeypatch.setattr(store, "DB_PATH", tmp_path / "cognitive.sqlite3")
+    remembered = []
+    monkeypatch.setattr(
+        brain, "remember",
+        lambda content, **kwargs: remembered.append((content, kwargs)) or len(remembered)
+    )
+
+    first = process_inbox(
+        inbox,
+        interpreter=lambda text, filename: {
+            "kind": "knowledge",
+            "title": "Nota",
+            "memory": "Primeira versão.",
+        },
+    )
+    assert first["ok"] and first["processed"] == 1
+    assert pending_live_speech() == []
+
+    note.write_text("Versão corrigida: o ChatGPT ajuda o Yon.", encoding="utf-8")
+    second = process_inbox(
+        inbox,
+        interpreter=lambda text, filename: {
+            "kind": "knowledge",
+            "title": "Novo conhecimento",
+            "memory": "O ChatGPT ajuda o Yon desde o começo do projeto.",
+            "notify_user": True,
+            "notification_text": "Senhor, adquiri um novo conhecimento: o ChatGPT ajuda o Yon desde o começo do projeto.",
+            "importance": "high",
+        },
+    )
+    assert second["ok"] and second["processed"] == 1
+    pending = pending_live_speech()
+    assert len(pending) == 1
+    assert "ChatGPT ajuda o Yon" in pending[0]["speech_text"]
+    assert len(remembered) == 2
+
+    again = process_inbox(
+        inbox,
+        interpreter=lambda *_: (_ for _ in ()).throw(AssertionError("same revision must not be reinterpreted")),
+    )
+    assert again["ok"] and again["already_processed"] == 1
+    assert len(pending_live_speech()) == 1
