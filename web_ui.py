@@ -236,6 +236,8 @@ class _Handler(BaseHTTPRequestHandler):
                 return self._send(500, json.dumps({"error": str(exc)}))
         if path == "/api/action":
             action = data.get("action")
+            if action == "logs":
+                return self._send(200, json.dumps({"items": list(self.ui._logs)[-100:]}, ensure_ascii=False))
             if action == "plugins":
                 return self._send(200, json.dumps({"items": self.ui.get_plugins() if self.ui.get_plugins else []}, ensure_ascii=False, default=str))
             if action == "tasks":
@@ -278,6 +280,7 @@ class JarvisUI:
         self._server = None
         self._server_thread = None
         self._ptt_armed = False
+        self._logs = []
         self._muted = False
         self._current_file = None
         self.on_text_command = None
@@ -356,9 +359,9 @@ class JarvisUI:
 
     def write_log(self, message):
         msg = str(message or "")[:1000]
-        if msg.startswith("ERR:") or msg.startswith("WARN:"):
-            _EVENTS.emit({"tipo": "aviso", "texto": msg})
-        else:
+        self._logs.append(msg)
+        self._logs = self._logs[-200:]
+        if msg.startswith(("ERR:", "WARN:")):
             _EVENTS.emit({"tipo": "aviso", "texto": msg})
 
     def show_content(self, title, text):
