@@ -57,6 +57,9 @@ from memory.memory_manager import (
     set_behavior_preferences as persist_behavior_preferences,
     infer_behavior_preferences_from_text,
 )
+from memory.learning_store import (
+    learn_from_user_text, format_learning_for_prompt,
+)
 
 # The file-backed tools (open_app, web_search, browser_control, …) are no longer
 # imported or declared here — they self-describe via a TOOL dict in their own
@@ -1315,14 +1318,21 @@ class JarvisLive:
 
         memory     = load_memory()
         mem_str    = format_memory_for_prompt(memory)
+        learning_str = format_learning_for_prompt()
         sys_prompt = _load_system_prompt()
 
-        now      = datetime.now()
-        time_str = now.strftime("%A, %B %d, %Y — %I:%M %p")
+        # Use the host's local timezone and include an unambiguous ISO timestamp.
+        # Rebuilt on every new Live connection, never hardcoded in the prompt.
+        now = datetime.now().astimezone()
+        time_str = now.strftime("%A, %d %B %Y — %H:%M:%S %Z")
         time_ctx = (
             f"[CURRENT DATE & TIME]\n"
-            f"Right now it is: {time_str}\n"
-            f"Use this to calculate exact times for reminders.\n\n"
+            f"Local time now: {time_str}\n"
+            f"ISO timestamp: {now.isoformat(timespec='seconds')}\n"
+            f"UTC offset: {now.strftime('%z')}\n"
+            f"Treat this as the authoritative current date. For latest/recent "
+            f"events, verify publication and event dates against it; never "
+            f"present an older result as the latest.\n\n"
         )
 
         # Identity injection — overrides any hardcoded name in prompt.txt
@@ -1393,6 +1403,8 @@ class JarvisLive:
         parts = [time_ctx, identity_ctx]
         if mem_str:
             parts.append(mem_str)
+        if learning_str:
+            parts.append(learning_str)
         parts.append(sys_prompt)
 
         cfg = dict(
@@ -2038,6 +2050,11 @@ class JarvisLive:
                                 # Persist clear, explicit startup preferences locally.
                                 # This deterministic path does not depend on the model
                                 # deciding to call a memory tool.
+                                # Promote only explicit corrections/learning cues;
+                                # ordinary conversation is not blindly stored.
+                                learned = learn_from_user_text(full_in)
+                                if learned:
+                                    print(f"[Memory] Experience learned: {learned[:100]}")
                                 behavior_updates = infer_behavior_preferences_from_text(full_in)
                                 if behavior_updates:
                                     saved_preferences = persist_behavior_preferences(behavior_updates)
