@@ -2784,6 +2784,10 @@ class JarvisLive:
                     # has no desktop WAKE button — so it wakes JARVIS if asleep.
                     if self._wake_enabled and not self._awake:
                         self.wake(reason="remote command")
+                    self._last_user_speech = time.monotonic()
+                    self._last_turn_complete_at = 0.0
+                    if self._turn_done_event:
+                        self._turn_done_event.clear()
                     await self.session.send_client_content(
                         turns={"role": "user", "parts": [{"text": text}]},
                         turn_complete=True,
