@@ -647,8 +647,8 @@
         const d=await r.json(); const items=d.items||[];
         mostrarPopup(action==="tasks"?"Tarefas":action==="plugins"?"Plugins":"Registro",items.length?items.map(x=>typeof x==="string"?x:(x.title||x.name||x.message||JSON.stringify(x))).join("\\n"):"Nenhum item disponível.");
       }else if(action==="wake"||action==="wake-manual"||action==="wake-install"){
-        const a=action==="wake"?"state":action==="wake-manual"?"manual":"install";
-        const r=await fetch("/api/wake",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:a})});
+        const a=action==="wake"?"state":action==="wake-manual"?"manual":action==="wake-toggle"?"toggle":"install";
+        const r=await fetch("/api/wake",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:a,enabled:true})});
         const d=await r.json();mostrarPopup("Ativação",JSON.stringify(d.result||d));
       }else if(action==="audio"){
         await fetch("/api/audio-device",{method:"POST"});mostrarPopup("Áudio","Solicitada a reconfiguração dos dispositivos.");
