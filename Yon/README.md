@@ -9,8 +9,8 @@ Este diretório é a raiz isolada do novo projeto Yon. O cérebro autônomo aind
 - Engrenagem para configurar a chave da API Gemini.
 - Entrada de texto, envio com Enter e leitura de anexos de texto comuns.
 - Transcrição de entrada e saída exibida dentro do chat, sem texto sobreposto à Orb.
-- Captura contínua do microfone e resposta falada pelo Gemini Live.
-- Reprodução em blocos curtos e interrupção por voz com detecção de eco adaptativa e confirmação de fala sustentada.
+- Sessão Gemini Live conectada ao iniciar, com microfone em push-to-talk: só envia áudio enquanto Espaço está pressionado; soltar envia `audio_stream_end` para concluir a fala.
+- Segurar Espaço durante a resposta interrompe a reprodução e começa a capturar a fala do usuário.
 - Reconexão automática da sessão de voz após uma queda.
 
 ## Componentes de voz extraídos/adaptados
@@ -50,14 +50,14 @@ A interface usa HTML/CSS/JavaScript sem framework adicional. O servidor local us
 ## Limitações que ainda precisam de validação no computador
 
 - O fluxo de áudio foi adaptado e precisa ser testado com o microfone e os alto-falantes reais. O cancelamento adaptativo de eco reduz falsos cortes, mas o resultado depende do ambiente acústico; fones de ouvido são úteis no primeiro teste.
-- A interrupção por voz está implementada, mas precisa de ajuste de sensibilidade no hardware real.
+- O push-to-talk e o fluxo de áudio precisam ser validados no microfone e nos alto-falantes reais.
 - O reconhecimento/transcrição e a fala em tempo real dependem da disponibilidade e das cotas do modelo Gemini Live.
 - Anexos nesta primeira versão aceitam arquivos de texto (TXT, MD, CSV, JSON e código); PDF e documentos Office ainda não foram adicionados.
 - Feedbacks verbais curtos enquanto o usuário ainda está elaborando uma ideia, raciocínio incremental durante a fala e execução paralela de tarefas serão evoluções posteriores do motor de conversação e do cérebro.
 
 ## Próximas etapas
 
-1. Instalar dependências e testar microfone, áudio de saída, transcrição, chat, interrupção e reconexão.
+1. Executar `INICIAR.bat` ou `python app.py` e testar Espaço pressionado/solto, microfone, áudio de saída, transcrição, chat e reconexão.
 2. Ajustar a sensibilidade do áudio conforme os testes reais.
 3. Refinar as configurações da API e os anexos.
 4. Construir o cérebro central, memória, enciclopédia técnica, catálogo de ferramentas e sistema de aprendizagem/autoevolução.
