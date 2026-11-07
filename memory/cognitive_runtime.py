@@ -390,11 +390,11 @@ def run_cognitive_cycle(request):
         for node in (assess,retrieve_node,plan_node,review_node): state=node(state)
         return state
 
-def graph_summary(limit=30):
+def graph_summary(limit=10000):
     try:
         with _LOCK,closing(_db()) as conn:
             rows=conn.execute("SELECT source_id,target_id,relation FROM memory_relations "
-              "ORDER BY id DESC LIMIT ?",(max(1,min(int(limit),100)),)).fetchall()
+              "ORDER BY id DESC LIMIT ?",(max(1,min(int(limit),10000)),)).fetchall()
         try:
             import networkx as nx
             graph=nx.DiGraph()
@@ -449,5 +449,7 @@ def consolidate_memory(memory_id, evidence):
         with _LOCK, closing(_db()) as conn, conn:
             cur = conn.execute("UPDATE memories SET level='consolidated',evidence=?,validated_at=? "
                 "WHERE id=? AND state='confirmed'", (evidence[:4000],_now(),int(memory_id)))
-            return cur.rowcount > 0
+            changed = cur.rowcount > 0
+        if changed: _sync_obsidian()
+        return changed
     except (sqlite3.Error,TypeError,ValueError): return False

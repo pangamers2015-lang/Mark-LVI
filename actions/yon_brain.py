@@ -25,6 +25,7 @@ def yon_brain(parameters: dict, player=None) -> str:
         if action=="goal_add":
             gid=cognitive_store.save_goal(str(p.get("title","")),str(p.get("description","")),
                 int(p.get("priority",3)),"planned")
+            if gid: brain._sync_obsidian()
             return f"Objective created with ID {gid}." if gid else "Could not create objective."
         if action=="goal_update":
             gid=int(p.get("goal_id",0))
@@ -36,6 +37,7 @@ def yon_brain(parameters: dict, player=None) -> str:
             description=str(p.get("description",existing["description"]))
             priority=int(p.get("priority",existing["priority"]))
             updated=cognitive_store.save_goal(title,description,priority,status,goal_id=gid)
+            if updated: brain._sync_obsidian()
             return f"Objective {gid} updated to {status}." if updated else "Could not update objective."
         if action=="goal_list":
             goals=cognitive_store.list_goals(limit=20)
@@ -84,7 +86,7 @@ def yon_brain(parameters: dict, player=None) -> str:
             result=export_cognitive_notes(str(p.get("vault_path","")) or None)
             if not result.get("ok"):
                 return "Obsidian export unavailable: "+str(result.get("error","Unknown error"))
-            return (f"Exported {result.get('memory_count',0)} memories and "
+            return (f"Exported {result.get('memory_count',0)} memories, {result.get('relationship_count',0)} relationships and "
                 f"{result.get('goal_count',0)} objectives to the configured Obsidian vault: "
                 +", ".join(result.get("files",[])))
         if action=="consult_local":
@@ -106,7 +108,7 @@ def yon_brain(parameters: dict, player=None) -> str:
             return (f"Yon cognitive system initialized={brain.initialize()}; active_goals={len(goals)}; "
                 f"graph_nodes={graph.get('nodes',0)}; graph_edges={graph.get('edges',0)}; "
                 f"semantic_retrieval={semantic_state}.")
-        return "Unknown action. Use status, remember, search, validate, goal_add, goal_update, goal_list, checkpoint, depend, index, consolidate, relate, reflect, consult_local or obsidian_export."
+        return "Unknown action. Use status, remember, search, validate, goal_add, goal_update, goal_list, checkpoint, depend, index, consolidate, relate, graph_sync, graph_status, reflect, consult_local or obsidian_export."
     except Exception as exc:
         return f"Yon cognitive tool failed safely: {type(exc).__name__}: {exc}"
 

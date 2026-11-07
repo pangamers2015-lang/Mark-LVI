@@ -89,6 +89,18 @@ class CognitiveRuntimeTests(unittest.TestCase):
             for edge in edges
         ))
 
+    def test_remember_automatically_syncs_configured_obsidian_vault(self):
+        vault = Path(self.temp.name) / "automatic_vault"
+        vault.mkdir()
+        with patch.dict(os.environ, {"YON_OBSIDIAN_VAULT": str(vault)}):
+            memory_id = cognitive_runtime.remember(
+                "Yon automatically refreshes its knowledge graph after durable memory changes.",
+                source="unit_test", state="hypothesis"
+            )
+        self.assertIsNotNone(memory_id)
+        self.assertTrue((vault / "Yon" / "Generated" / "Memory Graph.generated.md").exists())
+        self.assertTrue((vault / "Yon" / "Generated" / f"Memory {memory_id}.generated.md").exists())
+
     def test_obsidian_export_builds_linked_graph_notes(self):
         from memory.obsidian_bridge import export_cognitive_notes
         first = cognitive_runtime.remember(
