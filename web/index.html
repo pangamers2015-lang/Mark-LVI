@@ -582,6 +582,26 @@
     }
   }, 5000);
 
+  // Legenda sincronizada com a transcrição de saída do Yon.
+  let legendaTimer = null;
+  let legendaAtiva = false;
+  function atualizarLegenda(trecho) {
+    const area = el("resposta");
+    if (!area || !trecho) return;
+    clearTimeout(legendaTimer);
+    if (!legendaAtiva) area.textContent = "";
+    legendaAtiva = true;
+    area.textContent += (area.textContent ? " " : "") + trecho;
+  }
+  function finalizarLegenda() {
+    if (!legendaAtiva) return;
+    clearTimeout(legendaTimer);
+    legendaTimer = setTimeout(() => {
+      el("resposta").textContent = "";
+      legendaAtiva = false;
+    }, 4500);
+  }
+
   // ---------------------------------------------------------- tela
   let rotulosTurno = new Set();
   let avisoTimer = null;
@@ -627,6 +647,10 @@
         el("voce").textContent = "“" + e.texto + "”";
       } else if (e.tipo === "ferramenta") {
         chip(e.rotulo);
+      } else if (e.tipo === "legenda") {
+        atualizarLegenda(e.texto || "");
+      } else if (e.tipo === "legenda_fim") {
+        finalizarLegenda();
       } else if (e.tipo === "fala") {
         falar(e.audio);  // aviso rápido, o trabalho continua
       } else if (e.tipo === "resposta") {
