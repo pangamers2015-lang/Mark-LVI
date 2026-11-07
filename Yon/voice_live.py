@@ -44,6 +44,7 @@ class LiveVoice:
         self._ptt_held = threading.Event()
         self._mic_stream = None
         self._speaker_stream = None
+        self._mic_callback = None
 
     @property
     def running(self) -> bool:
@@ -74,11 +75,17 @@ class LiveVoice:
             self._ptt_held.set()
             if self._speaking.is_set():
                 self.interrupt()
+            try:
+                self._start_microphone()
+            except Exception:
+                self._ptt_held.clear()
+                raise
             self.emit({"type": "voice_state", "state": "listening"})
             return
         if not self._ptt_held.is_set():
             return
         self._ptt_held.clear()
+        self._stop_microphone()
         if self._loop and self._loop.is_running() and self._mic_queue is not None:
             self._loop.call_soon_threadsafe(self._queue_end_marker)
         self.emit({"type": "voice_state", "state": "thinking"})
@@ -203,12 +210,35 @@ class LiveVoice:
                 if self._loop:
                     self._loop.call_soon_threadsafe(self.emit, {"type": "voice_state", "state": "listening"})
 
-        self._mic_stream = sd.RawInputStream(samplerate=INPUT_RATE, blocksize=BLOCK, channels=1,
-                                             dtype="int16", callback=mic_callback)
+        self._mic_callback = mic_callback
         self._speaker_stream = sd.RawOutputStream(samplerate=OUTPUT_RATE, blocksize=BLOCK, channels=1,
                                                   dtype="int16", callback=speaker_callback)
-        self._mic_stream.start()
         self._speaker_stream.start()
+
+    def _start_microphone(self):
+        if self._mic_stream is not None:
+            return
+        self._mic_stream = sd.RawInputStream(
+            samplerate=INPUT_RATE, blocksize=BLOCK, channels=1,
+            dtype="int16", callback=self._mic_callback
+        )
+        try:
+            self._mic_stream.start()
+        except Exception:
+            try:
+                self._mic_stream.close()
+            finally:
+                self._mic_stream = None
+            raise
+
+    def _stop_microphone(self):
+        if self._mic_stream is not None:
+            try:
+                self._mic_stream.stop()
+                self._mic_stream.close()
+            except Exception:
+                pass
+            self._mic_stream = None
 
     def _queue_mic(self, pcm: bytes):
         if self._mic_queue is None:
@@ -239,14 +269,14 @@ class LiveVoice:
                 break
 
     def _close_audio(self):
-        for stream in (self._mic_stream, self._speaker_stream):
-            if stream is not None:
-                try:
-                    stream.stop()
-                    stream.close()
-                except Exception:
-                    pass
-        self._mic_stream = self._speaker_stream = None
+        self._stop_microphone()
+        if self._speaker_stream is not None:
+            try:
+                self._speaker_stream.stop()
+                self._speaker_stream.close()
+            except Exception:
+                pass
+        self._speaker_stream = None
 
     async def _send_audio(self, session):
         while not self._stop.is_set():
