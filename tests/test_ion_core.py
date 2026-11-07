@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import unittest
-from typing import Never
 
 from ion.brain import extract_json
 from ion.models import ProjectPlan
@@ -49,7 +48,7 @@ class MicrosoftAgentFrameworkTests(unittest.IsolatedAsyncioTestCase):
                 super().__init__(id="ion-maf-smoke-test")
 
             @handler
-            async def run(self, value: str, ctx: WorkflowContext[Never, str]) -> None:
+            async def run(self, value: str, ctx: WorkflowContext[str, str]) -> None:
                 await ctx.yield_output(value.upper())
 
         workflow = WorkflowBuilder(start_executor=EchoExecutor(), name="IonSmokeTest").build()
