@@ -1145,7 +1145,7 @@ class LogWidget(QTextEdit):
         self._tmr.stop()
         if self._typing:
             self._insert_immediate(self._text[self._pos:], self._tag)
-            self._insert_immediate("\\n", self._tag)
+            self._insert_immediate("\n", self._tag)
         self._typing = False
         self._text = ""
         self._pos = 0
@@ -1153,7 +1153,7 @@ class LogWidget(QTextEdit):
             line = self._queue.pop(0)
             tag = self._tag_for(line)
             self._insert_immediate(line, tag)
-            self._insert_immediate("\\n", tag)
+            self._insert_immediate("\n", tag)
 
     def append_streaming_text(self, text: str, prefix: str = "") -> None:
         """Append one assistant transcript chunk to a single live log entry."""
@@ -1169,7 +1169,7 @@ class LogWidget(QTextEdit):
         """Close the live transcript line and resume ordinary queued log entries."""
         if not self._stream_active:
             return
-        self._insert_immediate("\\n", "ai")
+        self._insert_immediate("\n", "ai")
         self._stream_active = False
         if self._queue and not self._typing:
             self._next()
