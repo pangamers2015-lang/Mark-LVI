@@ -12,11 +12,11 @@ class BackgroundNotificationTests(unittest.TestCase):
             "summary": "Pesquisar o resultado do último jogo do Flamengo",
             "status": "completed",
             "result": (
-                "FCC Cloud completed the task.\\n"
-                "Working directory: C:\\Yon\\project\\n"
-                "Session ID: private-session\\n"
-                "Reported API cost: US$ 0.05\\n"
-                "Result:\\nFlamengo venceu por 2 a 1."
+                "FCC Cloud completed the task.\n"
+                "Working directory: C:\\Yon\\project\n"
+                "Session ID: private-session\n"
+                "Reported API cost: US$ 0.05\n"
+                "Result:\nFlamengo venceu por 2 a 1."
             ),
         })
         self.assertIn("Flamengo venceu por 2 a 1.", prompt)
