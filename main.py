@@ -75,6 +75,7 @@ from memory.cognitive_runtime import (
 # system_status).
 from core import outcome
 from core import work_journal
+from core.background_notifications import build_task_notification
 from core.action_loader import strip_meta
 from actions.screen_processor  import _capture_camera, _capture_screen
 from actions.system_monitor    import SystemMonitor, get_system_status
@@ -640,6 +641,7 @@ class JarvisLive:
                 _item["notification_status"] = "pending"
                 work_journal.save_task(_item)
         self._background_notification_event = None
+        self._last_turn_complete_at = 0.0
         self._background_task_seq = max(
             (int(str(key).split("-")[-1]) for key in self._background_task_records
              if str(key).startswith("BG-") and str(key).split("-")[-1].isdigit()),
@@ -1012,8 +1014,12 @@ class JarvisLive:
                     speaking = self._is_speaking
                 quiet_for = time.monotonic() - self._last_user_speech
                 audio_pending = bool(self.audio_in_queue and not self.audio_in_queue.empty())
+                turn_quiet_for = (
+                    time.monotonic() - self._last_turn_complete_at
+                    if self._last_turn_complete_at else 0.0
+                )
                 if (
-                    not self._turn_done_event.is_set()
+                    turn_quiet_for < 1.5
                     or speaking
                     or audio_pending
                     or self._tail_active()
@@ -1043,19 +1049,19 @@ class JarvisLive:
 
                 try:
                     self._turn_done_event.clear()
+                    self._last_turn_complete_at = 0.0
                     await self.session.send_client_content(
                         turns={"role": "user", "parts": [{"text": message}]},
                         turn_complete=True,
                     )
-                    # Wait for the assistant's announcement to finish before
-                    # allowing another queued task to enter the conversation.
-                    await asyncio.wait_for(self._turn_done_event.wait(), timeout=150.0)
-                    deadline = time.monotonic() + 45.0
+                    # Wait for a fresh server turn_complete and drained audio.
+                    deadline = time.monotonic() + 150.0
                     while time.monotonic() < deadline:
                         with self._speaking_lock:
                             still_speaking = self._is_speaking
                         queued_audio = bool(self.audio_in_queue and not self.audio_in_queue.empty())
-                        if not still_speaking and not queued_audio and not self._tail_active():
+                        turn_finished = self._last_turn_complete_at > 0.0
+                        if turn_finished and not still_speaking and not queued_audio and not self._tail_active():
                             break
                         await asyncio.sleep(0.2)
                     with self._background_task_lock:
@@ -1255,6 +1261,7 @@ class JarvisLive:
         self._last_user_speech = time.monotonic()
         if self._turn_done_event:
             self._turn_done_event.clear()
+        self._last_turn_complete_at = 0.0
         asyncio.run_coroutine_threadsafe(
             self.session.send_client_content(
                 turns={"role": "user", "parts": [{"text": text}]},
@@ -2184,6 +2191,7 @@ class JarvisLive:
                             # sailed straight back in, which logged the answer
                             # twice AND made the avatar mouth it twice.
                             if txt and not _is_repeat_chunk(txt, out_buf):
+                                self._last_turn_complete_at = 0.0
                                 out_buf.append(txt)
                                 # Hand the words to the mouth as they arrive, so
                                 # the avatar can form the consonants the audio
@@ -2201,8 +2209,10 @@ class JarvisLive:
                                 self._last_user_speech = time.monotonic()
                                 if self._turn_done_event:
                                     self._turn_done_event.clear()
+                                self._last_turn_complete_at = 0.0
 
                         if sc.turn_complete:
+                            self._last_turn_complete_at = time.monotonic()
                             if self._turn_done_event:
                                 self._turn_done_event.set()
 
