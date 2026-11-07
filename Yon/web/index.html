@@ -44,7 +44,7 @@
 <script>
 (()=> {
 const $=id=>document.getElementById(id), canvas=$("scene"),ctx=canvas.getContext("2d");
-let w=0,h=0,dpr=1,tick=0,voiceActive=false,speaking=false,selectedFile=null,requestBusy=false,lastTranscriptNode=null;
+let w=0,h=0,dpr=1,tick=0,voiceActive=false,speaking=false,selectedFile=null,requestBusy=false,lastTranscriptNode=null,activeTranscript={user:null,yon:null};
 function resize(){dpr=Math.min(devicePixelRatio||1,2);w=innerWidth;h=innerHeight;canvas.width=w*dpr;canvas.height=h*dpr;canvas.style.width=w+"px";canvas.style.height=h+"px";ctx.setTransform(dpr,0,0,dpr,0,0)}
 addEventListener("resize",resize);resize();
 function orb(){
@@ -89,8 +89,8 @@ const events=new EventSource("/api/events");
 events.onmessage=e=>{try{const d=JSON.parse(e.data);
  if(d.type==="voice_state"){voiceActive=!["stopped","idle"].includes(d.state);speaking=d.state==="speaking";state(d.state==="connecting"?"thinking":d.state==="speaking"?"speaking":d.state==="listening"?"listening":"idle")}
  else if(d.type==="voice_error"){toast(d.text||"Falha na conexão de voz.");state("idle")}
- else if(d.type==="transcript"){if(d.speaker==="user"){lastTranscriptNode=addMessage(d.text,"user")}else{if(!lastTranscriptNode||!lastTranscriptNode.classList.contains("yon"))lastTranscriptNode=addMessage(d.text,"yon");else lastTranscriptNode.textContent+=" "+d.text;$("messages").scrollTop=$("messages").scrollHeight}}
- else if(d.type==="turn_complete"){lastTranscriptNode=null}
+ else if(d.type==="transcript"){const who=d.speaker==="user"?"user":"yon";const last=$("messages").lastElementChild;if(who==="user"&&last&&last.classList.contains("user")&&last.textContent.trim()===d.text.trim()){activeTranscript.user=last}else if(!activeTranscript[who]){activeTranscript[who]=addMessage(d.text,who)}else{activeTranscript[who].textContent+=" "+d.text;$("messages").scrollTop=$("messages").scrollHeight}lastTranscriptNode=activeTranscript[who]}
+ else if(d.type==="turn_complete"){lastTranscriptNode=null;activeTranscript={user:null,yon:null}}
  }catch(_){}};
 addEventListener("keydown",e=>{if(e.key==="Escape"){closeChat();$("settings").classList.remove("open")}if(e.key.toLowerCase()==="t"&&!e.repeat&&!["INPUT","TEXTAREA"].includes(document.activeElement.tagName))openChat()});
 (async()=>{try{const r=await fetch("/api/config");const d=await r.json();if(!d.configured)toast("Configure a API Gemini na engrenagem para conversar.");else startVoice()}catch(_){}})();
