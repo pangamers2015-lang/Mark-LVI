@@ -608,7 +608,7 @@ class JarvisUI:
             if len(top_items) == 1 and str(top_items[0].get("kind") or "") == "pasta":
                 folder_name = _safe_drop_relative_path(top_items[0].get("name"))
                 self._current_file = str(root / folder_name) if folder_name else str(root)
-            elif len(top_items) == 1 and str(top_items[0].get("kind") or "") == "arquivo" and len(saved) == 1:
+            elif len(top_items) == 1 and str(top_items[0].get("kind") or "") != "pasta" and len(saved) == 1:
                 self._current_file = saved[0]["path"]
             else:
                 self._current_file = None
@@ -620,6 +620,16 @@ class JarvisUI:
                 name = str(item.get("name") or "item")[:180]
                 kind = str(item.get("kind") or "item")[:30]
                 labels.append(f"- {kind}: {name}")
+            top_paths = {str(item.get("path") or "") for item in top_items}
+            for detail in manifest.get("fileDetails", [])[:100]:
+                if not isinstance(detail, dict):
+                    continue
+                relative = str(detail.get("path") or detail.get("name") or "")[:240]
+                if relative in top_paths:
+                    continue
+                kind = str(detail.get("kind") or "arquivo")[:30]
+                mime = str(detail.get("type") or "")[:80]
+                labels.append(f"- {kind}: {relative}" + (f" (MIME: {mime})" if mime else ""))
             if not labels:
                 labels = [f"- arquivo: {entry['relative']}" for entry in saved[:100]]
                 labels += [f"- pasta: {entry}" for entry in directories[:100]]
