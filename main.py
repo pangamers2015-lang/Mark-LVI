@@ -61,7 +61,7 @@ from memory.learning_store import (
     learn_from_user_text, format_learning_for_prompt,
 )
 from memory.continuity_store import record_turn, format_recent_context
-from memory.cognitive_store import format_cognitive_context
+from memory.cognitive_runtime import (\n    build_context as build_cognitive_context,\n    record_user_turn as cognitive_record_user_turn,\n    save_task_checkpoint as cognitive_save_checkpoint,\n)
 
 # The file-backed tools (open_app, web_search, browser_control, …) are no longer
 # imported or declared here — they self-describe via a TOOL dict in their own
@@ -936,6 +936,15 @@ class JarvisLive:
                 record["result"] = result
                 record["finished_at"] = datetime.now().isoformat(timespec="seconds")
                 work_journal.save_task(record)
+                try:
+                    cognitive_save_checkpoint(
+                        summary=f"Background task {task_id} ({name}) finished with status {status}.",
+                        next_step="Review the recorded result and verify any external side effects before relying on it.",
+                        status=status,
+                        evidence=str(result)[:3500],
+                    )
+                except Exception as _brain_error:
+                    print(f"[YonBrain] Background checkpoint skipped: {_brain_error}")
 
         # Return background web searches to Gemini automatically; previously
         # the result was only stored in the HUD and task journal.
@@ -1376,9 +1385,7 @@ class JarvisLive:
 
         memory     = load_memory()
         mem_str    = format_memory_for_prompt(memory)
-        learning_str = format_learning_for_prompt()
-        continuity_str = format_recent_context()
-        cognitive_str = format_cognitive_context()
+        cognitive_str = build_cognitive_context()
         sys_prompt = _load_system_prompt()
 
         # Use the host's local timezone and include an unambiguous ISO timestamp.
@@ -1463,10 +1470,6 @@ class JarvisLive:
         parts = [time_ctx, identity_ctx]
         if mem_str:
             parts.append(mem_str)
-        if learning_str:
-            parts.append(learning_str)
-        if continuity_str:
-            parts.append(continuity_str)
         if cognitive_str:
             parts.append(cognitive_str)
         parts.append(sys_prompt)
@@ -2125,6 +2128,10 @@ class JarvisLive:
                                 self.ui.write_log(f"You: {full_in}")
                                 self._session_log.append(f"User: {full_in}")
                                 record_turn("user", full_in)
+                                try:
+                                    cognitive_record_user_turn(full_in)
+                                except Exception as _brain_error:
+                                    print(f"[YonBrain] User-turn observation skipped: {_brain_error}")
 
                                 # Persist clear, explicit startup preferences locally.
                                 # This deterministic path does not depend on the model
