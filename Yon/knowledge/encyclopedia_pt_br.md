@@ -63,8 +63,8 @@ Depois de executar: verificar código de saída, arquivos/estado produzido e cri
 
 ## 6.1 Comandos operacionais de referência
 Os comandos abaixo são modelos. Antes de executar, confirme sistema operacional, pasta, arquivos de configuração e scripts existentes. Não execute comandos destrutivos por tentativa.
-- Python/Windows: `py -3.12 -m venv .venv`; instalar dependências: `.\\.venv\\Scripts\\python.exe -m pip install -r requirements.txt`; compilar: `python -m compileall -q .`; testes: `python -m unittest discover -s tests -v`.
-- Python/Linux/macOS: `python3 -m venv .venv`; instalar: `..venv/bin/python -m pip install -r requirements.txt`; testes: `..venv/bin/python -m unittest discover -s tests -v`.
+- Python/Windows: `py -3.12 -m venv .venv`; instalar dependências: .\.venv\Scripts\python.exe -m pip install -r requirements.txt; compilar: `python -m compileall -q .`; testes: `python -m unittest discover -s tests -v`.
+- Python/Linux/macOS: `python3 -m venv .venv`; instalar: ./.venv/bin/python -m pip install -r requirements.txt; testes: ./.venv/bin/python -m unittest discover -s tests -v.
 - Git: `git status --short` para inspecionar; `git diff --check` para espaços/erros simples; `git diff` para revisar; criar branch com `git switch -c nome-da-tarefa`; só depois de revisar usar `git add` e `git commit`.
 - Node: primeiro inspecionar `package.json`; instalar com `npm install`; iniciar com `npm run dev`; validar produção com `npm run build`; testar com `npm test` apenas se o script existir.
 - Phaser: iniciar projeto TypeScript com `npm create vite@latest jogo -- --template vanilla-ts`, adicionar `phaser` via npm, depois usar os scripts realmente definidos no `package.json`.
