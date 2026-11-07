@@ -9,11 +9,10 @@ from __future__ import annotations
 import json
 import mimetypes
 import os
-import tempfile
 import uuid
 from email.parser import BytesParser
 from email import policy
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 import threading
 import time
 import webbrowser
