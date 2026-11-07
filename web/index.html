@@ -131,6 +131,18 @@
   .velocidade { width: 100%; accent-color: #fff; }
   .config-nota { margin-top: 14px; font-size: 12px; color: var(--fraco); }
 
+  #yonDropOverlay { position:fixed; inset:14px; z-index:60; display:grid; place-items:center; border:2px dashed rgba(255,255,255,.72); border-radius:22px; background:rgba(0,0,0,.78); backdrop-filter:blur(12px); pointer-events:none; }
+  #yonDropOverlay[hidden] { display:none; }
+  .yon-drop-label { padding:18px 26px; border-radius:14px; background:rgba(255,255,255,.08); color:#fff; font-size:15px; letter-spacing:.04em; text-align:center; }
+  #yonPopup { max-height:min(72vh,720px); overflow:auto; box-sizing:border-box; }
+  .yon-popup-head { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .yon-popup-fechar { flex:0 0 auto; width:28px; height:28px; border:0; border-radius:50%; background:rgba(255,255,255,.1); color:#fff; cursor:pointer; font-size:18px; }
+  .yon-popup-texto a { color:#a9d5ff; text-decoration:underline; overflow-wrap:anywhere; }
+  .yon-popup-card { display:flex; align-items:center; gap:12px; margin:0 0 14px; padding:12px; border:1px solid rgba(255,255,255,.12); border-radius:12px; background:rgba(255,255,255,.045); }
+  .yon-card-team { display:flex; flex:1; min-width:0; flex-direction:column; align-items:center; gap:6px; text-align:center; font-size:12px; }
+  .yon-card-team img { width:42px; height:42px; object-fit:contain; }
+  .yon-card-score { font-size:22px; font-weight:600; white-space:nowrap; }
+  .yon-card-meta { color:rgba(255,255,255,.58); font-size:11px; line-height:1.5; margin-top:8px; }
   @keyframes pisca { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
   @keyframes entra { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
   @media (max-width: 600px) {
@@ -177,6 +189,7 @@
 </head>
 <body data-estado="iniciando">
 <canvas id="esfera" aria-label="Esfera do Yon. Segure a barra de espaço para falar."></canvas>
+<div id="yonDropOverlay" hidden><div class="yon-drop-label">Solte aqui — qualquer parte da tela aceita arquivos e pastas</div></div>
 
 <div class="topo">
   <span class="marca">YON</span>
@@ -207,7 +220,7 @@
 </div>
 
 
-<div id="yonPopup" hidden><div class="yon-popup-titulo"></div><div class="yon-popup-texto"></div></div>
+<div id="yonPopup" hidden><div class="yon-popup-head"><div class="yon-popup-titulo"></div><button class="yon-popup-fechar" id="yonPopupClose" aria-label="Fechar">×</button></div><div class="yon-popup-card" hidden></div><div class="yon-popup-texto"></div></div>
 <div id="yonConfirm" hidden><div class="yon-confirm-box"><div class="yon-confirm-titulo"></div><div class="yon-confirm-texto"></div><div class="yon-actions"><button class="secondary" id="yonConfirmNo">Cancelar</button><button id="yonConfirmOk">Confirmar</button></div></div></div>
 <div id="yonSetup" hidden><div class="yon-setup-box"><h2>Configuração inicial do Yon</h2><p>Informe a chave Gemini e o sistema operacional para iniciar o assistente. Os demais dados locais serão preservados.</p><label for="yonApiKey">Chave Gemini</label><input id="yonApiKey" type="password" autocomplete="off" placeholder="Cole sua chave API"><label for="yonOs">Sistema operacional</label><select id="yonOs"><option value="windows">Windows</option><option value="macos">macOS</option><option value="linux">Linux</option></select><button id="yonSetupSave">Salvar e iniciar</button><p id="yonSetupError"></p></div></div>
 
@@ -252,6 +265,102 @@
     corpo.dataset.estado = novo;
     el("estadoTexto").textContent = NOMES[novo] || novo;
   }
+
+  // Arrastar e soltar funciona em toda a janela, não apenas numa caixa.
+  const dropOverlay = el("yonDropOverlay");
+  let dragDepth = 0;
+  const temArquivos = (event) => Array.from(event.dataTransfer?.types || []).includes("Files");
+  async function lerEntradaArrastada(entry, caminho, resultado) {
+    if (entry.isFile) {
+      await new Promise((resolve, reject) => entry.file(file => {
+        resultado.files.push({file, path:caminho});
+        resolve();
+      }, reject));
+      return;
+    }
+    if (entry.isDirectory) {
+      resultado.directories.push(caminho);
+      const reader = entry.createReader();
+      let children = [];
+      do {
+        children = await new Promise((resolve, reject) => reader.readEntries(resolve, reject));
+        for (const child of children) {
+          await lerEntradaArrastada(child, caminho + "/" + child.name, resultado);
+        }
+      } while (children.length);
+    }
+  }
+  async function receberItensArrastados(dataTransfer) {
+    const resultado = {files:[], directories:[], items:[]};
+    const entries = Array.from(dataTransfer.items || [])
+      .filter(item => item.kind === "file")
+      .map(item => item.webkitGetAsEntry ? item.webkitGetAsEntry() : null);
+    if (entries.some(Boolean)) {
+      for (const entry of entries) {
+        if (!entry) continue;
+        resultado.items.push({name:entry.name,kind:entry.isDirectory?"pasta":"arquivo",path:entry.name});
+        await lerEntradaArrastada(entry, entry.name, resultado);
+      }
+    } else {
+      for (const file of Array.from(dataTransfer.files || [])) {
+        const path = file.webkitRelativePath || file.name;
+        resultado.files.push({file,path});
+        resultado.items.push({name:file.name,kind:"arquivo",path});
+      }
+    }
+    return resultado;
+  }
+  document.addEventListener("dragenter", event => {
+    if (!temArquivos(event)) return;
+    event.preventDefault();
+    dragDepth++;
+    dropOverlay.hidden = false;
+  });
+  document.addEventListener("dragover", event => {
+    if (!temArquivos(event)) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+    dropOverlay.hidden = false;
+  });
+  document.addEventListener("dragleave", event => {
+    if (!temArquivos(event)) return;
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (!dragDepth) dropOverlay.hidden = true;
+  });
+  document.addEventListener("drop", async event => {
+    if (!temArquivos(event)) return;
+    event.preventDefault();
+    dragDepth = 0;
+    dropOverlay.hidden = true;
+    try {
+      const recebidos = await receberItensArrastados(event.dataTransfer);
+      const total = recebidos.files.reduce((sum, item) => sum + item.file.size, 0);
+      if (recebidos.files.length > 300 || total > 100 * 1024 * 1024) {
+        avisar("O limite é de 300 arquivos e 100 MB por envio.");
+        return;
+      }
+      if (!recebidos.files.length && !recebidos.directories.length) {
+        avisar("Não consegui identificar arquivos ou pastas nesse arraste.");
+        return;
+      }
+      await interromper();
+      await prepararAudio();
+      novoTurno();
+      const form = new FormData();
+      form.append("manifest", new Blob([JSON.stringify({
+        items:recebidos.items, directories:recebidos.directories
+      })], {type:"application/json"}), "manifest.json");
+      for (const item of recebidos.files) form.append("files", item.file, item.path);
+      mudarEstado("pensando");
+      const response = await fetch("/api/drop", {method:"POST", body:form});
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Não foi possível enviar os itens.");
+      avisar("Itens recebidos. O Yon está identificando o que você mostrou.");
+    } catch (error) {
+      avisar(error && error.message ? error.message : "Falha ao receber os itens.");
+      mudarEstado("parado");
+    }
+  });
 
   // ---------------------------------------------------------- esfera
   const tela = el("esfera");
@@ -654,14 +763,8 @@
         el("voce").textContent = "“" + e.texto + "”";
       } else if (e.tipo === "ferramenta") {
         chip(e.rotulo);
-      } else if (e.tipo === "legenda_inicio") {
-        iniciarLegenda();
-      } else if (e.tipo === "legenda_snapshot") {
-        restaurarLegenda(e.texto || "");
-      } else if (e.tipo === "legenda") {
-        atualizarLegenda(e.texto || "");
-      } else if (e.tipo === "legenda_fim") {
-        finalizarLegenda();
+      } else if (["legenda_inicio", "legenda_snapshot", "legenda", "legenda_fim"].includes(e.tipo)) {
+        // A fala continua no áudio; não duplicamos cada frase no visual.
       } else if (e.tipo === "fala") {
         falar(e.audio);  // aviso rápido, o trabalho continua
       } else if (e.tipo === "resposta") {
@@ -683,7 +786,10 @@
         el("resposta").textContent = e.texto || "";
         el("tempo").textContent = e.titulo || "";
         corpo.classList.add("detalhes");
-        if (e.popup !== false) mostrarPopup(e.titulo || "Yon", e.texto || "");
+        if (e.popup !== false) mostrarPopup(e.titulo || "Yon", e.texto || "", e.card || null);
+      } else if (e.tipo === "itens_recebidos") {
+        const lista = (e.itens || []).map(item => (item.kind || "item") + ": " + (item.name || "sem nome")).join("\\n");
+        mostrarPopup("Itens recebidos", lista || "Itens recebidos. O Yon vai identificar o conteúdo.");
       } else if (e.tipo === "confirmacao") {
         mostrarConfirmacao(e.titulo || "Confirmação", e.detalhe || "");
       } else if (e.tipo === "tarefas") {
@@ -714,18 +820,71 @@
 
 
   // ---------------------------------------------------------- notificações e confirmação do Yon
-  let popupTimer = null;
-  function mostrarPopup(titulo, texto) {
-    let p = document.getElementById("yonPopup");
+  function inserirTextoComLinks(container, texto) {
+    const regex = /https?:\\/\\/[^\\s<>"']+/gi;
+    const source = String(texto || "");
+    let cursor = 0, match;
+    while ((match = regex.exec(source)) !== null) {
+      if (match.index > cursor) container.appendChild(document.createTextNode(source.slice(cursor, match.index)));
+      let url = match[0], suffix = "";
+      while (/[),.!?]$/.test(url)) { suffix = url.slice(-1) + suffix; url = url.slice(0, -1); }
+      try {
+        const parsed = new URL(url);
+        if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+          const link = document.createElement("a");
+          link.href = parsed.href; link.target = "_blank"; link.rel = "noopener noreferrer";
+          link.textContent = url;
+          container.appendChild(link);
+        } else container.appendChild(document.createTextNode(url));
+      } catch (_) { container.appendChild(document.createTextNode(url)); }
+      if (suffix) container.appendChild(document.createTextNode(suffix));
+      cursor = match.index + match[0].length;
+    }
+    if (cursor < source.length) container.appendChild(document.createTextNode(source.slice(cursor)));
+  }
+  function mostrarCartao(card, container) {
+    if (!card || typeof card !== "object") return;
+    const home = card.home || card.home_team, away = card.away || card.away_team;
+    const score = card.score || (card.home_score != null && card.away_score != null ? card.home_score + " × " + card.away_score : "");
+    if (!home && !away && !card.image) return;
+    container.replaceChildren();
+    const safeImage = (src, alt) => {
+      if (!src) return null;
+      try { const u = new URL(src); if (!["http:","https:"].includes(u.protocol)) return null;
+        const img = document.createElement("img"); img.src=u.href; img.alt=alt || ""; img.loading="lazy"; return img;
+      } catch (_) { return null; }
+    };
+    if (home || away) {
+      const makeTeam = (name, logo) => {
+        const box=document.createElement("div"); box.className="yon-card-team";
+        const img=safeImage(logo,name); if(img) box.appendChild(img);
+        const label=document.createElement("span"); label.textContent=name || "—"; box.appendChild(label); return box;
+      };
+      container.appendChild(makeTeam(home,card.home_logo));
+      const middle=document.createElement("div"); middle.className="yon-card-score"; middle.textContent=score || "×";
+      container.appendChild(middle);
+      container.appendChild(makeTeam(away,card.away_logo));
+    } else {
+      const img=safeImage(card.image,card.image_alt); if(img) container.appendChild(img);
+    }
+    const meta=[card.competition,card.date,card.status].filter(Boolean).join(" · ");
+    if(meta){const label=document.createElement("div");label.className="yon-card-meta";label.textContent=meta;container.appendChild(label);}
+    container.hidden=false;
+  }
+  function mostrarPopup(titulo, texto, card=null) {
+    const p = el("yonPopup");
     if (!p) return;
     p.querySelector(".yon-popup-titulo").textContent = titulo;
-    p.querySelector(".yon-popup-texto").textContent = texto;
-    const spots = [{left:"24px",right:"auto",top:"78px",bottom:"auto"},{left:"auto",right:"24px",top:"78px",bottom:"auto"},{left:"24px",right:"auto",top:"auto",bottom:"78px"},{left:"auto",right:"24px",top:"auto",bottom:"78px"}];
-    const spot = spots[Math.floor(Math.random()*spots.length)]; Object.assign(p.style,spot);
+    const body = p.querySelector(".yon-popup-texto");
+    body.replaceChildren();
+    inserirTextoComLinks(body, texto);
+    const cardArea = p.querySelector(".yon-popup-card");
+    cardArea.hidden = true;
+    if (card) mostrarCartao(card, cardArea);
+    p.style.left = "auto"; p.style.right = "24px"; p.style.top = "78px"; p.style.bottom = "auto";
     p.hidden = false;
-    clearTimeout(popupTimer);
-    popupTimer = setTimeout(() => { p.hidden = true; }, Math.min(18000, Math.max(5000, String(texto).length * 45)));
   }
+  el("yonPopupClose")?.addEventListener("click", () => { el("yonPopup").hidden = true; });
   function mostrarConfirmacao(titulo, detalhe) {
     const p = document.getElementById("yonConfirm");
     if (!p) return;
