@@ -44,6 +44,6 @@ def build_task_notification(record: dict) -> str:
         "Não invente nem amplie fatos que não estejam no resultado.\n"
         f"Tarefa: {summary[:240]}\n"
         f"Situação: {outcome}\n"
-        f"Resultado registrado: {result or 'Nenhum resultado textual foi registrado.'}\\n"
+        f"Resultado registrado: {result or 'Nenhum resultado textual foi registrado.'}\n"
         "[/YON_BACKGROUND_TASK_NOTIFICATION]"
     )
