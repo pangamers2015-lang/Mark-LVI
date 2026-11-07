@@ -2761,9 +2761,12 @@ class JarvisLive:
             mark_live_speech_delivered,
         )
         last_error = ""
+        first_poll = True
         print(f"[YonInbox] Live GitHub monitor active (every {GITHUB_POLL_SECONDS}s).")
         while True:
-            await asyncio.sleep(GITHUB_POLL_SECONDS)
+            if not first_poll:
+                await asyncio.sleep(GITHUB_POLL_SECONDS)
+            first_poll = False
             if not self.session:
                 continue
             try:
