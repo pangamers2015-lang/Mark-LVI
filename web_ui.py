@@ -90,11 +90,7 @@ class _RootShim:
         return timer
 
     def quit(self):
-        try:
-            if self.owner._window:
-                self.owner._window.destroy()
-        except Exception:
-            pass
+        self.owner.request_shutdown()
 
     def protocol(self, *_):
         return None
@@ -156,6 +152,9 @@ class _Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         path = urlparse(self.path).path
         data = self._json()
+        if path == "/api/fechar":
+            self.ui.schedule_browser_shutdown()
+            return self._send(202, '{"ok":true}')
         if path == "/api/texto":
             text = str(data.get("texto", "")).strip()
             if text and self.ui.on_text_command:
@@ -169,16 +168,13 @@ class _Handler(BaseHTTPRequestHandler):
             return self._send(200, '{"ok":true}')
         if path == "/api/ptt":
             held = bool(data.get("held"))
-            if held and not self.ui._ptt_armed and self.ui.on_push_to_talk:
-                try:
-                    self.ui.on_push_to_talk(True)
-                    self.ui._ptt_armed = True
-                except Exception as exc:
-                    return self._send(500, json.dumps({"error": str(exc)}))
-            if self.ui.ptt_hold:
-                threading.Thread(target=self.ui.ptt_hold, args=(held,), daemon=True).start()
-                return self._send(200, '{"ok":true}')
-            return self._send(503, '{"ok":false,"error":"Push-to-talk não está disponível."}')
+            try:
+                if self.ui.set_ptt_hold(held):
+                    return self._send(200, '{"ok":true}')
+                return self._send(503, '{"ok":false,"error":"Push-to-talk não está disponível."}')
+            except Exception as exc:
+                self.ui.write_log("ERR: Push-to-talk: " + str(exc)[:180])
+                return self._send(500, json.dumps({"ok": False, "error": str(exc)}))
         if path == "/api/reiniciar":
             self.ui.set_state("LISTENING")
             self.ui.write_log("SYS: Nova interação iniciada pela interface.")
@@ -264,6 +260,7 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_header("Connection", "keep-alive")
         self.send_header("X-Accel-Buffering", "no")
         self.end_headers()
+        self.ui._browser_client_connected()
         q = _EVENTS.subscribe()
         try:
             while True:
@@ -278,6 +275,7 @@ class _Handler(BaseHTTPRequestHandler):
             pass
         finally:
             _EVENTS.unsubscribe(q)
+            self.ui._browser_client_disconnected()
 
 
 class JarvisUI:
@@ -290,6 +288,14 @@ class JarvisUI:
         self._server = None
         self._server_thread = None
         self._ptt_armed = False
+        self._ptt_lock = threading.RLock()
+        self._shutdown_lock = threading.RLock()
+        self._browser_clients = 0
+        self._browser_opened = False
+        self._browser_seen = False
+        self._browser_close_timer = None
+        self._closing = False
+        self.on_shutdown = None
         self._logs = []
         self._camera_stop = threading.Event()
         self._camera_thread = None
@@ -313,6 +319,88 @@ class JarvisUI:
         self.request_say = None
         self.defer_restart_until_idle = None
         self._assistant_name = "YON"
+
+    def _browser_client_connected(self):
+        with self._shutdown_lock:
+            self._browser_clients += 1
+            self._browser_seen = True
+            timer = self._browser_close_timer
+            self._browser_close_timer = None
+        if timer:
+            timer.cancel()
+
+    def _browser_client_disconnected(self):
+        with self._shutdown_lock:
+            self._browser_clients = max(0, self._browser_clients - 1)
+            should_schedule = self._browser_opened and self._browser_clients == 0
+        if should_schedule:
+            self.schedule_browser_shutdown()
+
+    def schedule_browser_shutdown(self):
+        """Close Yon only after the last browser tab has really gone away."""
+        with self._shutdown_lock:
+            if self._closing or not self._browser_opened:
+                return
+            if self._browser_close_timer:
+                self._browser_close_timer.cancel()
+            timer = threading.Timer(5.0, self._shutdown_if_browser_closed)
+            timer.daemon = True
+            self._browser_close_timer = timer
+            timer.start()
+
+    def _shutdown_if_browser_closed(self):
+        with self._shutdown_lock:
+            self._browser_close_timer = None
+            if self._closing or self._browser_clients:
+                return
+        self.request_shutdown()
+
+    def set_ptt_hold(self, held):
+        """Serialize browser press/release so fast key events cannot overtake."""
+        with self._ptt_lock:
+            if held and not self._ptt_armed:
+                if not self.on_push_to_talk:
+                    return False
+                self.on_push_to_talk(True)
+                self._ptt_armed = True
+            if not self.ptt_hold:
+                return False
+            self.ptt_hold(bool(held))
+            return True
+
+    def request_shutdown(self):
+        """Stop the assistant backend and localhost server after browser exit."""
+        with self._shutdown_lock:
+            if self._closing:
+                return
+            self._closing = True
+            timer = self._browser_close_timer
+            self._browser_close_timer = None
+        if timer:
+            timer.cancel()
+        try:
+            self.stop_camera_stream()
+        except Exception:
+            pass
+        try:
+            with self._ptt_lock:
+                if self.ptt_hold:
+                    self.ptt_hold(False)
+                if self._ptt_armed and self.on_push_to_talk:
+                    self.on_push_to_talk(False)
+                self._ptt_armed = False
+        except Exception as exc:
+            print(f"[YON] PTT shutdown warning: {exc}", flush=True)
+        _EVENTS.emit({"tipo": "aviso", "texto": "Encerrando o Yon..."})
+        callback = self.on_shutdown
+        if callback:
+            try:
+                callback()
+            except Exception as exc:
+                print(f"[YON] Backend shutdown warning: {exc}", flush=True)
+        server = self._server
+        if server:
+            threading.Thread(target=server.shutdown, daemon=True, name="Yon-Server-Shutdown").start()
 
     def _check_config(self):
         try:
@@ -381,6 +469,7 @@ class JarvisUI:
         if self._server is None:
             raise RuntimeError("Não foi possível iniciar o servidor local do Yon.")
         url = f"http://127.0.0.1:{self._server.server_address[1]}/"
+        self._browser_opened = True
         try:
             opened = webbrowser.open_new_tab(url)
             if not opened:
@@ -392,8 +481,9 @@ class JarvisUI:
             starter.join(timeout=0.5)
 
     def wait_for_api_key(self):
-        while not self._win._ready:
+        while not self._win._ready and not self._closing:
             time.sleep(0.2)
+        return not self._closing
 
     def set_state(self, state):
         _EVENTS.emit({"tipo": "estado", "estado": _state_name(state)})
