@@ -2,7 +2,7 @@ name: Yon knowledge validation
 on:
   push:
     branches: [feature/behavioral-preferences]
-    paths: ["knowledge/updates/**","memory/knowledge_updates.py","tests/test_knowledge_updates.py",".github/workflows/knowledge-validation.yml"]
+    paths: ["knowledge/updates/**","memory/knowledge_updates.py","memory/cognitive_runtime.py","actions/knowledge_update.py","core/prompt.txt","tests/test_knowledge_updates.py",".github/workflows/knowledge-validation.yml"]
   pull_request:
     paths: ["knowledge/updates/**","memory/knowledge_updates.py","tests/test_knowledge_updates.py",".github/workflows/knowledge-validation.yml"]
 permissions:
