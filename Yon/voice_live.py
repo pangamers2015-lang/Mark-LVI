@@ -13,7 +13,7 @@ from google.genai import types
 from echo_guard import EchoGuard
 from barge_in import BargeInDetector
 
-LIVE_MODEL = "models/gemini-3.1-flash-live-preview"
+LIVE_MODEL = "gemini-3.8-live"
 INPUT_RATE = 16_000
 OUTPUT_RATE = 24_000
 BLOCK = 1024
