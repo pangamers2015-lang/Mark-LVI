@@ -1,3 +1,5 @@
+import base64
+
 from memory import cognitive_runtime as brain
 from memory import cognitive_store as store
 from memory import github_inbox as inbox_module
@@ -68,3 +70,30 @@ def test_remote_live_speech_is_queued_and_delivered_once(tmp_path, monkeypatch):
 
     assert mark_live_speech_delivered([pending[0]["id"]]) == 1
     assert pending_live_speech() == []
+
+
+def test_remote_fetch_uses_branch_query_and_decodes_txt(monkeypatch):
+    payload = base64.b64encode("Fale 1 2 3".encode("utf-8")).decode("ascii")
+    seen = []
+
+    def fake_github_json(url, etag=None):
+        seen.append((url, etag))
+        if "/contents/knowledge/inbox?" in url:
+            return ([{
+                "type": "file",
+                "path": "knowledge/inbox/speak-now.txt",
+                "size": 10,
+            }], '"inbox-etag"', False)
+        if "/contents/knowledge/inbox/speak-now.txt?" in url:
+            return ({"encoding": "base64", "content": payload}, None, False)
+        raise AssertionError("Unexpected GitHub API URL: " + url)
+
+    monkeypatch.setattr(inbox_module, "_REMOTE_ETAG", None)
+    monkeypatch.setattr(inbox_module, "_github_json", fake_github_json)
+    monkeypatch.setattr(inbox_module, "GITHUB_REPOSITORY", "pangamers2015-lang/Mark-LVI")
+    monkeypatch.setattr(inbox_module, "GITHUB_BRANCH", "feature/behavioral-preferences")
+
+    documents = inbox_module._fetch_remote_txt_files()
+    assert documents == [("speak-now.txt", "Fale 1 2 3".encode("utf-8"))]
+    assert "ref=feature%2Fbehavioral-preferences" in seen[0][0]
+    assert seen[0][1] is None
