@@ -249,11 +249,33 @@ def _weather(query: str) -> str:
 
 
 def _news(query: str = "") -> str:
+    from datetime import datetime
+    now = datetime.now().astimezone()
     topic = query.strip() or "principais notícias atuais do Brasil e do mundo"
-    return _search_open_websearch(f"Notícias recentes e atualizadas: {topic}", limit=8)
+    return _search_open_websearch(
+        f"Notícias publicadas hoje ou nos últimos dias até {now.strftime('%d/%m/%Y')}: "
+        f"{topic}. Priorize publicações de {now.year} e informe datas.",
+        limit=8,
+    )
 
 
 def _search(query: str) -> str:
+    # Temporal intent must be explicit: engines often rank evergreen pages from
+    # previous years above the newest event when the query is underspecified.
+    import re
+    from datetime import datetime
+    now = datetime.now().astimezone()
+    temporal = re.search(
+        r"(?i)\b(últim[oa]s?|mais recente|atual|hoje|ontem|agora|"
+        r"recent(?:e|es)?|latest|last|current|today|yesterday|this week)\b",
+        query,
+    )
+    if temporal:
+        query = (
+            f"{query}. Informação atualizada até {now.strftime('%d/%m/%Y')}. "
+            f"Priorize acontecimentos e páginas de {now.year}; confirme a data "
+            "do evento e da publicação. Não apresente resultados antigos como atuais."
+        )
     return _search_open_websearch(query, limit=8)
 
 
