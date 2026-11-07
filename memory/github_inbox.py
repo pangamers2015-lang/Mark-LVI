@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import sqlite3
+from contextlib import closing
+from datetime import datetime, timezone
 from pathlib import Path
 
 from memory import cognitive_store as store
@@ -108,7 +109,7 @@ def process_inbox(root=None, interpreter=None) -> dict:
         return {"ok": False, **counts, "errors": ["Inbox path is not a directory."]}
 
     try:
-        with _connect() as conn:
+        with closing(_connect()) as conn, conn:
             files = sorted(inbox.rglob("*.txt"))
             for path in files:
                 try:
@@ -154,7 +155,7 @@ def process_inbox(root=None, interpreter=None) -> dict:
                             "INSERT OR IGNORE INTO startup_directives"
                             "(source_path,digest,instruction,status,created_at) VALUES(?,?,?,'pending',?)",
                             (rel, digest, startup,
-                             __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat()))
+                             datetime.now(timezone.utc).isoformat()))
                     conn.execute(
                         "INSERT INTO github_inbox_receipts(source_path,digest,memory_id,processed_at) VALUES(?,?,?,?)",
                         (rel, digest, int(memory_id),
