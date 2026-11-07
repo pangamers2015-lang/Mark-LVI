@@ -75,7 +75,7 @@ from memory.cognitive_runtime import (
 # system_status).
 from core import outcome
 from core import work_journal
-from core.background_notifications import build_task_notification, can_deliver_notification
+from core.background_notifications import build_task_notification
 from core.action_loader import strip_meta
 from actions.screen_processor  import _capture_camera, _capture_screen
 from actions.system_monitor    import SystemMonitor, get_system_status
@@ -1027,15 +1027,16 @@ class JarvisLive:
                     speaking = self._is_speaking
                 quiet_for = time.monotonic() - self._last_user_speech
                 audio_pending = bool(self.audio_in_queue and not self.audio_in_queue.empty())
-                if not can_deliver_notification(
-                    turn_complete_at=self._last_turn_complete_at,
-                    now=time.monotonic(),
-                    speaking=speaking,
-                    audio_pending=audio_pending,
-                    tail_active=self._tail_active(),
-                    user_quiet_for=quiet_for,
-                    wake_enabled=self._wake_enabled,
-                    awake=self._awake,
+                turn_quiet_for = (
+                    time.monotonic() - self._last_turn_complete_at
+                    if self._last_turn_complete_at else 0.0
+                )
+                if (
+                    turn_quiet_for < 1.5
+                    or speaking
+                    or audio_pending
+                    or self._tail_active()
+                    or quiet_for < 1.5
                 ):
                     await asyncio.sleep(0.25)
                     continue
@@ -1050,15 +1051,12 @@ class JarvisLive:
                     work_journal.save_task(live_record)
 
                 message = build_task_notification(task)
-                if task.get("name") == "web_search":
-                    self._pending_search_popup_query = task.get("summary") or "Pesquisa concluída"
                 if not message:
                     with self._background_task_lock:
                         live_record = self._background_task_records.get(task_id)
                         if live_record:
                             live_record["notification_status"] = "delivered"
                             work_journal.save_task(live_record)
-                    self._maybe_restart_when_idle()
                     continue
 
                 try:
@@ -1088,7 +1086,6 @@ class JarvisLive:
                             live_record["notification_status"] = "delivered"
                             work_journal.save_task(live_record)
                     print(f"[Notifications] Announced background task {task_id}.")
-                    self._maybe_restart_when_idle()
                 except asyncio.CancelledError:
                     with self._background_task_lock:
                         live_record = self._background_task_records.get(task_id)
@@ -1451,8 +1448,6 @@ class JarvisLive:
         self._play_cursor = 0.0     # next batch starts a fresh timeline
         if self._turn_done_event:
             self._turn_done_event.clear()
-        self._last_user_speech = time.monotonic()
-        self._last_turn_complete_at = 0.0
         # Draining the queue stops the speakers, but a local engine is still
         # generating the rest of the answer and would keep filling it back up.
         # Live has nothing to cancel here — the server stops on its own.
