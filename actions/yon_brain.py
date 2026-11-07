@@ -118,10 +118,10 @@ def yon_brain(parameters: dict, player=None) -> str:
                         f"{str(item.get('content',''))[:400]}"
                         for item in hits
                     ]
-                    memory_context="\\n".join(memory_lines)[:1200]
+                    memory_context="\n".join(memory_lines)[:1200]
                     full_prompt=(
-                        "[OPTIONAL RELEVANT YON MEMORY — use only if directly useful]\\n"
-                        +memory_context+"\\n\\n[ASSIGNMENT]\\n"+prompt
+                        "[OPTIONAL RELEVANT YON MEMORY — use only if directly useful]\n"
+                        +memory_context+"\n\n[ASSIGNMENT]\n"+prompt
                     )
 
             result=ollama_chat(full_prompt,model=str(p.get("model","") or "") or None,
@@ -131,8 +131,8 @@ def yon_brain(parameters: dict, player=None) -> str:
             response=str(result.get("response","")).strip()
             if not response:
                 return "Local model returned an empty response; no result was passed to the coordinator."
-            return ("[QWEN_RESULT — UNVERIFIED]\\n"
-                f"{response}\\n"
+            return ("[QWEN_RESULT — UNVERIFIED]\n"
+                f"{response}\n"
                 "[COORDINATOR] Evaluate this result independently. Verify important claims "
                 "and do not claim that the Qwen executed or verified anything unless evidence exists.")
         if action=="status":
