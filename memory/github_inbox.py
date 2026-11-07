@@ -143,14 +143,14 @@ def process_inbox(root=None, interpreter=None) -> dict:
                     startup = str(result.get("startup_instruction", "")).strip()[:1000]
                     if kind not in {"knowledge", "procedure", "startup_once"} or not memory_text:
                         raise ValueError("Interpreted content failed validation.")
+                    if kind == "startup_once" and not startup:
+                        raise ValueError("One-time startup instruction is missing.")
                     memory_id = brain.remember(
                         f"{title}: {memory_text}", level="semantic",
                         source=f"github_inbox:{rel}", state="hypothesis", evidence="")
                     if not memory_id:
                         raise RuntimeError("SQLite memory write failed.")
                     if kind == "startup_once":
-                        if not startup:
-                            raise ValueError("One-time startup instruction is missing.")
                         conn.execute(
                             "INSERT OR IGNORE INTO startup_directives"
                             "(source_path,digest,instruction,status,created_at) VALUES(?,?,?,'pending',?)",
