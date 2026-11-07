@@ -891,8 +891,11 @@ class JarvisLive:
         with self._background_task_lock:
             if not self._restart_when_idle:
                 return
-            if any(item.get("status") == "running"
-                   for item in self._background_task_records.values()):
+            if any(
+                item.get("status") == "running"
+                or item.get("notification_status") in ("pending", "delivering")
+                for item in self._background_task_records.values()
+            ):
                 return
             self._restart_when_idle = False
         print("[JARVIS] Background work is idle; handing off to the self-updater.")
@@ -940,9 +943,13 @@ class JarvisLive:
                     ),
                 )
             result = str(raw or "Done.")
-            status = "failed" if result.lower().startswith(
+            _result_lower = result.lower()
+            status = "failed" if _result_lower.startswith(
                 ("status=failed ", "tool '", "plugin '", "action '",
-                 "search failed", "failed:")
+                 "search failed", "failed:", "fcc execution failed",
+                 "fcc exited with code", "fcc reported an execution error",
+                 "fcc task timed out", "fcc output could not be interpreted",
+                 "fcc task not started")
             ) else "completed"
 
 
@@ -1004,7 +1011,11 @@ class JarvisLive:
                 if not pending:
                     event.clear()
                     break
-                if not self.session or not self._turn_done_event:
+                if (
+                    not self.session
+                    or not self._turn_done_event
+                    or (self._wake_enabled and not self._awake)
+                ):
                     await asyncio.sleep(1.0)
                     continue
 
@@ -1759,7 +1770,9 @@ class JarvisLive:
                 if len(self._background_task_records) > 40:
                     completed = [
                         key for key, value in self._background_task_records.items()
-                        if value["status"] != "running" and key != task_id
+                        if value["status"] != "running"
+                        and value.get("notification_status") not in ("pending", "delivering")
+                        and key != task_id
                     ]
                     for key in completed[: len(self._background_task_records) - 40]:
                         self._background_task_records.pop(key, None)
