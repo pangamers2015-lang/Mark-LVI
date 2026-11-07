@@ -9,8 +9,8 @@ Este diretório é a raiz isolada do novo projeto Yon. O cérebro autônomo aind
 - Engrenagem para configurar a chave da API Gemini.
 - Entrada de texto, envio com Enter e leitura de anexos de texto comuns.
 - Transcrição de entrada e saída exibida dentro do chat, sem texto sobreposto à Orb.
-- Sessão Gemini Live conectada ao iniciar; o dispositivo de microfone só é aberto enquanto Espaço está pressionado. Soltar fecha a captura e envia `audio_stream_end` para concluir a fala. No celular, toque e segure a Orb.
-- Segurar Espaço durante a resposta interrompe a reprodução e começa a capturar a fala do usuário.
+- Sessão Gemini Live conectada ao iniciar. O microfone é aberto durante a fala do Yon apenas para análise local de possível interrupção; esses blocos não são enviados ao Gemini enquanto não houver voz do usuário confirmada. Fora desse momento, o microfone só transmite enquanto Espaço está pressionado. Soltar envia `audio_stream_end` para concluir a fala. No celular, toque e segure a Orb.
+- Interrupção por voz: durante a resposta, `EchoGuard` compara o áudio captado com o áudio reproduzido e `BargeInDetector` exige fala sustentada antes de cortar a resposta. A fala confirmada é então encaminhada ao Gemini; uma pausa curta encerra a captura. Espaço continua disponível como interrupção manual imediata.
 - Reconexão automática da sessão de voz após uma queda.
 
 ## Componentes de voz extraídos/adaptados
@@ -49,8 +49,8 @@ A interface usa HTML/CSS/JavaScript sem framework adicional. O servidor local us
 
 ## Limitações que ainda precisam de validação no computador
 
-- O fluxo de áudio foi adaptado e precisa ser testado com o microfone e os alto-falantes reais. O cancelamento adaptativo de eco reduz falsos cortes, mas o resultado depende do ambiente acústico; fones de ouvido são úteis no primeiro teste.
-- O push-to-talk e o fluxo de áudio precisam ser validados no microfone e nos alto-falantes reais.
+- O fluxo de áudio e a detecção de interrupção foram integrados ao código, mas precisam ser testados com o microfone e os alto-falantes reais. O cancelamento adaptativo de eco reduz falsos cortes; o resultado depende do ambiente acústico e do dispositivo. Fones de ouvido são úteis no primeiro teste.
+- A detecção automática de interrupção deve ser calibrada em hardware real; se o ambiente não permitir distinguir voz e eco com confiança, o sistema deve evitar interromper e o usuário ainda pode usar Espaço.
 - O reconhecimento/transcrição e a fala em tempo real dependem da disponibilidade e das cotas do modelo Gemini Live.
 - Anexos nesta primeira versão aceitam arquivos de texto (TXT, MD, CSV, JSON e código); PDF e documentos Office ainda não foram adicionados.
 - Feedbacks verbais curtos enquanto o usuário ainda está elaborando uma ideia, raciocínio incremental durante a fala e execução paralela de tarefas serão evoluções posteriores do motor de conversação e do cérebro.
