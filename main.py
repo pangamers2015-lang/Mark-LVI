@@ -1448,6 +1448,8 @@ class JarvisLive:
         self._play_cursor = 0.0     # next batch starts a fresh timeline
         if self._turn_done_event:
             self._turn_done_event.clear()
+        self._last_user_speech = time.monotonic()
+        self._last_turn_complete_at = 0.0
         # Draining the queue stops the speakers, but a local engine is still
         # generating the rest of the answer and would keep filling it back up.
         # Live has nothing to cancel here — the server stops on its own.
