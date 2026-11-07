@@ -230,14 +230,11 @@ def save_turn_tuning(values: dict) -> None:
 
 
 def get_proactive_audio_enabled() -> bool:
-    """Whether the model gets to decide an utterance was not aimed at it and
-    stay quiet.
+    """Whether the model may suppress speech it judges was not addressed to it.
 
-    On by default — it is what stops the assistant answering the room. But it
-    is also the first thing to switch off if replies ever seem to arrive a turn
-    late: what looks like lag is usually the model having judged your previous
-    sentence as not addressed to it, and only changing its mind once the next
-    one arrives.
+    Off by default so direct user speech is not silently suppressed. Enable
+    explicitly in api_keys.json when filtering room conversation is more
+    important than reliably answering every direct utterance.
     """
     # Prefer answering the user's direct speech instead of silently suppressing
     # it when the model guesses the utterance was not addressed to the assistant.
