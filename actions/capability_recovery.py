@@ -19,7 +19,6 @@ _BLOCKED_MARKERS = (
 
 _CAPABILITY_MARKERS = (
     "unknown tool:",
-    "is not available",
     "not available in this build",
     "not implemented",
     "unsupported operation",
@@ -46,6 +45,8 @@ def is_capability_failure(tool_name: str, args: dict | None, result: str) -> boo
     if any(marker in text for marker in _BLOCKED_MARKERS):
         return False
     if any(marker in text for marker in _CAPABILITY_MARKERS):
+        return True
+    if " is not available" in text and any(prefix in text for prefix in ("action '" + chr(34), "plugin '" + chr(34), "tool '" + chr(34))):
         return True
     return text.startswith("unknown tool:")
 
