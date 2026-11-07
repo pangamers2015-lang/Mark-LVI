@@ -600,7 +600,8 @@
         const j = e.job || {};
         mostrarPopup("Desenvolvimento", [j.title || j.name || "Tarefa de código", j.status || "", j.message || j.detail || ""].filter(Boolean).join("\\n"));
       } else if (e.tipo === "review") {
-        mostrarPopup(e.titulo || "Revisão", e.resumo || "");
+        const detalhes = (e.findings || []).map(x => "• " + (x.heading || "Ponto") + ": " + (x.detail || "")).join("\n");
+        mostrarPopup(e.titulo || "Revisão", [e.resumo || "", detalhes].filter(Boolean).join("\n\n"));
       } else if (e.tipo === "quiz") {
         mostrarPopup("Questionário: " + (e.topico || ""), "Questionário recebido. O painel interativo será conectado na próxima etapa.");
       } else if (e.tipo === "camera") {
@@ -663,7 +664,12 @@
         mostrarPopup(action==="tasks"?"Tarefas":action==="plugins"?"Plugins":"Registro",items.length?items.map(x=>typeof x==="string"?x:(x.title||x.name||x.message||JSON.stringify(x))).join("\\n"):"Nenhum item disponível.");
       }else if(action==="wake"||action==="wake-manual"||action==="wake-toggle"||action==="wake-install"){
         const a=action==="wake"?"state":action==="wake-manual"?"manual":action==="wake-toggle"?"toggle":"install";
-        const r=await fetch("/api/wake",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:a,enabled:true})});
+        let enabled = true;
+        if (a === "toggle") {
+          const current = await fetch("/api/wake",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"state"})}).then(x=>x.json());
+          enabled = !Boolean((current.result || {}).enabled);
+        }
+        const r=await fetch("/api/wake",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:a,enabled})});
         const d=await r.json();mostrarPopup("Ativação",JSON.stringify(d.result||d));
       }else if(action==="audio"){
         await fetch("/api/audio-device",{method:"POST"});mostrarPopup("Áudio","Solicitada a reconfiguração dos dispositivos.");
