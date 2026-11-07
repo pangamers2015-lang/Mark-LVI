@@ -7,7 +7,8 @@
 - Retrieval: SQLite FTS5 plus optional local sentence embeddings.
 - Knowledge graph: durable SQLite relations and optional NetworkX graph analysis.
 - Metacognition: objective, uncertainty, evidence, research and verification checklist.
-- Objectives: priorities and progress checkpoints, integrated with background task completion.
+- Objectives: priorities, lifecycle updates, prerequisite dependencies with cycle checks, and progress checkpoints.
+- Background work: start, completion and interrupted-recovery checkpoints are persisted.
 - Supervisor: assess → retrieve → plan → review, with LangGraph and a standard-library fallback.
 - Agent interface: active model can call yon_brain to search/store memories, validate evidence,
   create/list goals, checkpoint work, connect concepts and assess complex requests.
@@ -26,6 +27,7 @@ The core cognitive runtime and lexical retrieval use Python's standard library.
 Optional packages are listed in requirements-cognitive.txt:
 - LangGraph: supervisor workflow orchestration.
 - NetworkX: graph analysis.
+- unittest suite: isolated regression tests are included under tests/test_cognitive_runtime.py.
 - Sentence Transformers: local semantic embeddings; model downloads on first use.
 
 Install from the project root with: pip install -r requirements-cognitive.txt
