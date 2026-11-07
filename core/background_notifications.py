@@ -30,6 +30,28 @@ def _public_result(record: dict) -> str:
     return result[:9000]
 
 
+def can_deliver_notification(
+    *,
+    turn_complete_at: float,
+    now: float,
+    speaking: bool,
+    audio_pending: bool,
+    tail_active: bool,
+    user_quiet_for: float,
+    wake_enabled: bool = False,
+    awake: bool = True,
+    minimum_quiet: float = 1.5,
+) -> bool:
+    """Only allow delivery after a completed, silent, user-idle conversation turn."""
+    if wake_enabled and not awake:
+        return False
+    if not turn_complete_at or now - turn_complete_at < minimum_quiet:
+        return False
+    if speaking or audio_pending or tail_active:
+        return False
+    return user_quiet_for >= minimum_quiet
+
+
 def build_task_notification(record: dict) -> str:
     """Build a concise internal handoff that asks the live model to notify the user."""
     if not isinstance(record, dict):
