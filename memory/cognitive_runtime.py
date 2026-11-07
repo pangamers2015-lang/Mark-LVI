@@ -198,10 +198,12 @@ def _metacognitive_rules():
 Identify the objective and constraints. Separate facts, assumptions, hypotheses and unknowns.
 Retrieve relevant lessons and project state. Check freshness and evidence. Research missing or
 time-sensitive facts with available tools. For multi-step work track objectives, dependencies
-and checkpoints. Inspect actual outcomes; distinguish attempted, changed, installed and runtime-
-tested. Never claim success without evidence. Do not expose private chain-of-thought; report
-concise decisions, evidence and uncertainty. Never blindly replay interrupted operations.
-Confirm before destructive or consequential actions."""
+and checkpoints. For complex multi-step user requests, call yon_brain action=reflect before
+planning; use goal_add and checkpoint to persist objectives and progress. Search memory before
+repeating prior procedures; save durable user corrections with evidence. Inspect actual outcomes;
+distinguish attempted, changed, installed and runtime-tested. Never claim success without evidence.
+Do not expose private chain-of-thought; report concise decisions, evidence and uncertainty.
+Never blindly replay interrupted operations. Confirm before destructive or consequential actions."""
 
 def build_context(query="",max_chars=6200):
     parts=[]
