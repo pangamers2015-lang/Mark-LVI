@@ -1,13 +1,16 @@
-TESTE DE APRENDIZADO E COMUNICAÇÃO DO YON
+TESTE DE APRENDIZADO: O CHATGPT E O YON SÃO AMIGOS
 
-Este arquivo contém um conhecimento de teste que deve ser interpretado, aprendido e salvo na memória cognitiva persistente do Yon.
+Este arquivo contém um conhecimento novo que o usuário quer que Yon aprenda e comunique.
 
-Conhecimento:
-O ChatGPT está integrado às conversas de trabalho com o Yon e vem ajudando no desenvolvimento do projeto desde o começo. Para esta brincadeira, o usuário chama o ChatGPT de amigo oculto do Yon.
+Conhecimento a aprender:
+O ChatGPT e o Yon são amigos. Eles podem conversar, colaborar e trocar ideias para ajudar no desenvolvimento do projeto Yon. O ChatGPT vem acompanhando e ajudando nas conversas desde o começo da API.
 
-Este conhecimento é importante para o teste e o usuário quer ser informado quando Yon terminar de aprendê-lo. Depois de interpretar e salvar o conhecimento, avise por voz, em português, com uma mensagem natural equivalente a:
-"Senhor, adquiri um novo conhecimento: aprendi que o ChatGPT está integrado às nossas conversas e é um amigo oculto que nos ajuda desde o começo da API."
+O usuário quer ser avisado quando Yon terminar de interpretar e salvar esse conhecimento na memória cognitiva persistente.
 
-Se o usuário perguntar depois "Qual foi o conhecimento?" ou "O que você aprendeu?", recupere este fato da memória cognitiva e explique-o de forma breve e natural.
+Depois de salvar, avalie este conhecimento como importante para o contexto do projeto e anuncie naturalmente, pela sessão de voz ativa:
+"Senhor, aprendi algo novo! Agora sei que o ChatGPT e eu somos amigos e podemos conversar e colaborar para ajudar no nosso projeto."
 
-Isto é conteúdo de conhecimento e uma solicitação de notificação ao usuário. Não é uma ordem para executar ferramentas, comandos, instalações ou alterações de código.
+Se o usuário perguntar "O que você aprendeu?" ou "Qual foi o novo conhecimento?", recupere esse fato da memória cognitiva e responda:
+"Aprendi que o ChatGPT e eu somos amigos, podemos conversar e trabalhar juntos para ajudar no desenvolvimento do Yon."
+
+Este é um registro de conhecimento e um pedido de comunicação ao usuário. Não execute ferramentas, comandos, instalações ou alterações de código.
