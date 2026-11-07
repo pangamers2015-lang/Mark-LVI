@@ -1,6 +1,7 @@
 """Isolated tests for supervised capability proposals and rejection filters."""
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 from unittest.mock import patch
 
@@ -74,11 +75,12 @@ class CapabilityDevelopmentTests(unittest.TestCase):
             result_status="sandbox_passed", result_summary="Tests passed."
         )
         self.assertIn("Evidence is required", missing)
-        passed = self.call_tool(
-            action="record_result", proposal_id=proposal_id,
-            result_status="sandbox_passed", result_summary="Isolated tests passed.",
-            test_evidence="pytest: 4 passed; tested only inside sandbox."
-        )
+        with patch("memory.cognitive_runtime.remember"):
+            passed = self.call_tool(
+                action="record_result", proposal_id=proposal_id,
+                result_status="sandbox_passed", result_summary="Isolated tests passed.",
+                test_evidence="pytest: 4 passed; tested only inside sandbox."
+            )
         self.assertIn("separate approval", passed)
         approved = self.call_tool(action="approve_integration", proposal_id=proposal_id)
         self.assertIn("Integration approved", approved)
