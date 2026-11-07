@@ -18,6 +18,7 @@ MAX_BODY = 8 * 1024 * 1024
 _clients: list[queue.Queue] = []
 _clients_lock = threading.Lock()
 _voice = None
+_server = None
 
 
 def publish(event: dict):
@@ -127,6 +128,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/api/config":
             self.send_json(200, {"configured": bool(api_key()), "voice_running": bool(_voice and _voice.running),
+                                 "voice_connected": bool(_voice and _voice.connected),
                                  "text_model": TEXT_MODEL, "live_model": "models/gemini-3.1-flash-live-preview"})
             return
         if self.path == "/api/events":
@@ -172,6 +174,15 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         try:
+            if self.path == "/api/client/closing":
+                def shutdown_if_unused():
+                    if not _clients and _server is not None:
+                        if _voice:
+                            _voice.stop()
+                        threading.Thread(target=_server.shutdown, daemon=True).start()
+                threading.Timer(2.5, shutdown_if_unused).start()
+                self.send_json(200, {"ok": True})
+                return
             data = self.read_json()
             if self.path == "/api/config":
                 key = str(data.get("api_key") or "").strip()
@@ -186,6 +197,12 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/api/voice/start":
                 start_voice()
                 self.send_json(200, {"ok": True})
+                return
+            if self.path == "/api/voice/ptt":
+                if not _voice or not _voice.connected:
+                    raise RuntimeError("A conexão de voz ainda não está pronta.")
+                _voice.hold_to_talk(bool(data.get("held")))
+                self.send_json(200, {"ok": True, "held": bool(data.get("held"))})
                 return
             if self.path == "/api/voice/stop":
                 if _voice:
@@ -217,7 +234,9 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
+    global _server
     server = ThreadingHTTPServer((HOST, PORT), Handler)
+    _server = server
     print(f"Yon interface: http://{HOST}:{PORT}")
     print("Pressione Ctrl+C para encerrar.")
     if api_key():
