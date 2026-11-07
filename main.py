@@ -1229,6 +1229,23 @@ class JarvisLive:
             pass
         return scope
 
+    async def _finish_live_audio(self) -> None:
+        """Flush the final PTT audio frames and explicitly close the Live input turn."""
+        queue = self.out_queue
+        if queue is not None:
+            try:
+                await asyncio.wait_for(queue.join(), timeout=3.0)
+            except asyncio.TimeoutError:
+                self.ui.write_log(
+                    "WARN: A fila de áudio não esvaziou a tempo antes do fim da fala."
+                )
+        session = self.session
+        if session is not None and self._engine is None:
+            # The microphone stops sending PCM as soon as Space is released.
+            # Tell Gemini Live that this PTT audio stream has ended so its VAD
+            # can flush the buffered speech and produce the transcription/answer.
+            await session.send_realtime_input(audio_stream_end=True)
+
     async def _flush_pipeline_after_audio(self) -> None:
         """Wait for every captured PCM frame to reach STT before flushing it."""
         queue = self.out_queue
@@ -1267,12 +1284,17 @@ class JarvisLive:
         # signal — which is also why it is the more reliable of the two ways to
         # talk to one. Scheduled onto the loop because this may arrive on the
         # hotkey thread.
-        if not held and self._engine is not None and self._loop is not None:
+        if not held and self._loop is not None:
             try:
-                asyncio.run_coroutine_threadsafe(
-                    self._flush_pipeline_after_audio(), self._loop)
+                if self._engine is not None:
+                    asyncio.run_coroutine_threadsafe(
+                        self._flush_pipeline_after_audio(), self._loop)
+                elif self.session is not None:
+                    asyncio.run_coroutine_threadsafe(
+                        self._finish_live_audio(), self._loop)
             except Exception as e:
-                print(f"[JARVIS] PTT flush failed: {e}")
+                print(f"[JARVIS] PTT audio finalization failed: {e}")
+                self.ui.write_log(f"WARN: Não consegui finalizar o áudio do PTT: {e}")
         try:
             if held:
                 state = "LISTENING"
@@ -1915,7 +1937,7 @@ class JarvisLive:
                 data = indata.tobytes()
                 loop.call_soon_threadsafe(
                     self.out_queue.put_nowait,
-                    {"data": data, "mime_type": "audio/pcm"}
+                    {"data": data, "mime_type": f"audio/pcm;rate={SEND_SAMPLE_RATE}"}
                 )
                 try:
                     self.ui.set_audio_level(_pcm_level(indata))
