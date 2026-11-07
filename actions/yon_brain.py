@@ -1,0 +1,74 @@
+"""User-facing tools for Yon's integrated cognitive system."""
+from memory import cognitive_store
+from memory import cognitive_runtime as brain
+
+def yon_brain(parameters: dict, player=None) -> str:
+    p=parameters or {}; action=str(p.get("action","status")).strip().lower()
+    try:
+        if action=="remember":
+            state=str(p.get("state","hypothesis")).lower()
+            mid=brain.remember(p.get("content",""),level=str(p.get("level","semantic")).lower(),
+                source=str(p.get("source","user_or_conversation")),state=state,
+                evidence=str(p.get("evidence","")))
+            return (f"Memory recorded with ID {mid} and state {state}. It is not confirmed "
+                "unless evidence supports that state.") if mid else "I could not record that memory."
+        if action=="search":
+            hits=brain.retrieve(str(p.get("query","")),limit=8)
+            return "Relevant memories:\n"+"\n".join(
+                f"#{x['id']} [{x['level']} | {x['state']} | {x['source']}] {x['content']}"
+                for x in hits) if hits else "No relevant structured memories were found."
+        if action=="validate":
+            ok=brain.validate_memory(int(p.get("memory_id",0)),str(p.get("state","confirmed")),
+                str(p.get("evidence","")))
+            return "Memory state updated with evidence." if ok else (
+                "Could not update memory. Confirmed memories require explicit evidence.")
+        if action=="goal_add":
+            gid=cognitive_store.save_goal(str(p.get("title","")),str(p.get("description","")),
+                int(p.get("priority",3)),"planned")
+            return f"Objective created with ID {gid}." if gid else "Could not create objective."
+        if action=="goal_list":
+            goals=cognitive_store.list_goals(limit=20)
+            return "Active objectives:\n"+"\n".join(
+                f"#{g['id']} P{g['priority']} [{g['status']}] {g['title']}: {g['description']}"
+                for g in goals) if goals else "There are no active objectives."
+        if action=="checkpoint":
+            cid=brain.save_task_checkpoint(str(p.get("summary","")),str(p.get("next_step","")),
+                int(p["goal_id"]) if p.get("goal_id") else None,
+                str(p.get("state","in_progress")),str(p.get("evidence","")))
+            return f"Checkpoint saved with ID {cid}." if cid else "Could not save checkpoint."
+        if action=="relate":
+            ok=brain.relate(int(p.get("source_id",0)),int(p.get("target_id",0)),
+                str(p.get("relation","related_to")),str(p.get("evidence","")))
+            return "Memory relationship saved." if ok else "Could not create that relationship."
+        if action=="reflect":
+            r=brain.run_cognitive_cycle(str(p.get("request",""))); a=r.get("assessment",{})
+            return (f"Cognitive assessment:\n- Decision: {a.get('decision')}\n"
+                f"- Research needed: {a.get('needs_research')}\n- Multi-step: {a.get('multi_step')}\n"
+                "- Plan:\n  "+"\n  ".join(r.get("plan",[]))+"\n- "+str(r.get("review","")))
+        if action=="status":
+            goals=cognitive_store.list_goals(limit=100); graph=brain.graph_summary()
+            return (f"Yon cognitive system initialized={brain.initialize()}; active_goals={len(goals)}; "
+                f"graph_nodes={graph.get('nodes',0)}; graph_edges={graph.get('edges',0)}. "
+                "Semantic retrieval requires its optional model dependency.")
+        return "Unknown action. Use status, remember, search, validate, goal_add, goal_list, checkpoint, relate or reflect."
+    except Exception as exc:
+        return f"Yon cognitive tool failed safely: {type(exc).__name__}: {exc}"
+
+TOOL={
+"name":"yon_brain",
+"description":("Manages Yon's persistent cognitive system: evidence-aware memories, retrieval, "
+"validation, objectives, checkpoints, knowledge relationships and metacognitive assessment. "
+"Use remember only for durable useful knowledge, not every utterance. Prefer hypothesis unless "
+"evidence justifies confirmed. Use checkpoint after meaningful progress and goal_add for multi-step "
+"work. Search before repeating known procedures. Use reflect to assess complex requests. Use status "
+"to inspect the brain."),
+"tier":"core","brief":"Stores and retrieves memories, validates evidence, and tracks objectives/checkpoints.",
+"parameters":{"type":"OBJECT","properties":{
+"action":{"type":"STRING","enum":["status","remember","search","validate","goal_add","goal_list","checkpoint","relate","reflect"]},
+"content":{"type":"STRING"},"level":{"type":"STRING","enum":["working","episodic","semantic","consolidated"]},
+"source":{"type":"STRING"},"state":{"type":"STRING"},"evidence":{"type":"STRING"},
+"query":{"type":"STRING"},"memory_id":{"type":"INTEGER"},"title":{"type":"STRING"},
+"description":{"type":"STRING"},"priority":{"type":"INTEGER"},"goal_id":{"type":"INTEGER"},
+"summary":{"type":"STRING"},"source_id":{"type":"INTEGER"},"target_id":{"type":"INTEGER"},
+"relation":{"type":"STRING"},"next_step":{"type":"STRING"},"request":{"type":"STRING"}},
+"required":["action"]},"handler":yon_brain}
