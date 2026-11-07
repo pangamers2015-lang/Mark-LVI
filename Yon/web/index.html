@@ -10,7 +10,7 @@
 #scene{position:fixed;inset:0;width:100%;height:100%;z-index:0}
 .topline{position:fixed;z-index:2;top:25px;left:30px;right:30px;display:flex;align-items:center;justify-content:space-between;color:#9aa9a7;font-size:11px;letter-spacing:.28em;text-transform:uppercase;pointer-events:none}.brand{font-weight:600;color:#e7f5f2}.status{display:flex;align-items:center;gap:9px;letter-spacing:.14em}.dot{width:6px;height:6px;border-radius:50%;background:#7eddd1;box-shadow:0 0 12px #7eddd1;opacity:.55}body[data-state="listening"] .dot,body[data-state="speaking"] .dot{opacity:1}
 #gear{position:fixed;z-index:8;right:22px;top:17px;width:40px;height:40px;border:1px solid transparent;border-radius:50%;background:transparent;color:#9aacab;font-size:20px;opacity:.35;transition:.2s}#gear:hover{opacity:1;background:#ffffff0d;border-color:var(--line);transform:rotate(25deg)}
-#orbHint{position:fixed;z-index:2;left:50%;bottom:8%;transform:translateX(-50%);font-size:10px;letter-spacing:.2em;color:#6f8280;text-transform:uppercase;white-space:nowrap;pointer-events:none}
+#orbHint{position:fixed;z-index:2;left:50%;bottom:8%;transform:translateX(-50%);font-size:10px;letter-spacing:.2em;color:#6f8280;text-transform:uppercase;white-space:nowrap;pointer-events:none}#scene{touch-action:none;cursor:grab}body[data-state="listening"] #scene{cursor:grabbing}
 #chat{position:fixed;z-index:5;right:24px;top:78px;bottom:26px;width:min(430px,calc(100vw - 32px));display:flex;flex-direction:column;background:rgba(5,12,13,.88);border:1px solid var(--line);border-radius:18px;backdrop-filter:blur(22px);box-shadow:0 24px 90px #0009;transform:translateX(calc(100% + 40px));transition:transform .32s cubic-bezier(.2,.8,.2,1)}body.chat-open #chat{transform:translateX(0)}.chat-head{height:58px;flex:none;padding:0 18px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);font-size:11px;letter-spacing:.2em;text-transform:uppercase}.chat-head button,.iconbtn{border:0;background:transparent;color:#9eaeac;font-size:19px}.messages{padding:18px;overflow:auto;flex:1;display:flex;flex-direction:column;gap:13px;scrollbar-width:thin;scrollbar-color:#263635 transparent}.msg{max-width:92%;padding:11px 13px;border:1px solid var(--line);border-radius:13px;background:#ffffff08;white-space:pre-wrap;line-height:1.5;font-size:13px;overflow-wrap:anywhere}.msg.user{align-self:flex-end;background:#14302e;border-color:#366c65}.msg.yon{align-self:flex-start}.msg.system{align-self:center;border:0;background:transparent;color:#849390;font-size:11px}.composer{padding:12px;border-top:1px solid var(--line);display:grid;grid-template-columns:1fr auto;gap:8px}.composer textarea{resize:none;min-height:46px;max-height:120px;padding:12px;background:#0a1515;border:1px solid var(--line);border-radius:11px;color:var(--text);outline:none}.send{width:46px;border:1px solid #427e76;border-radius:11px;background:#183b37;color:#dffaf5}.attach{grid-column:1/-1;display:flex;align-items:center;gap:8px;color:#849390;font-size:11px}.attach input{max-width:100%;font-size:11px}
 #settings{position:fixed;z-index:12;inset:0;background:#0009;backdrop-filter:blur(12px);display:none;align-items:center;justify-content:center;padding:16px}#settings.open{display:flex}.settings-card{width:min(430px,100%);padding:22px;border:1px solid var(--line);border-radius:17px;background:#081011;box-shadow:0 30px 100px #000b}.settings-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:22px;font-size:12px;letter-spacing:.2em;text-transform:uppercase}.settings-card label{display:block;color:#a6b8b5;font-size:12px;margin:14px 0 7px}.settings-card input{width:100%;padding:12px;border:1px solid var(--line);border-radius:9px;background:#030909;color:var(--text)}.primary{margin-top:16px;padding:11px 15px;border:1px solid #447e76;border-radius:9px;background:#153a35;color:#e9fffb}.note{font-size:11px;color:#7f908d;line-height:1.5;margin-top:13px}
 #toast{position:fixed;z-index:20;left:50%;bottom:22px;transform:translate(-50%,20px);opacity:0;pointer-events:none;padding:10px 14px;border:1px solid var(--line);border-radius:10px;background:#091212;color:#d8e9e6;font-size:12px;transition:.2s}#toast.show{opacity:1;transform:translate(-50%,0)}
@@ -36,7 +36,7 @@
   <div class="settings-top"><span>Configurações</span><button class="iconbtn" id="closeSettings">×</button></div>
   <label for="apiKey">Chave da API Gemini</label><input id="apiKey" type="password" autocomplete="off" placeholder="Cole sua chave API">
   <button class="primary" id="saveKey">Salvar chave</button>
-  <div class="note">A chave fica salva localmente em Yon/config/api_key.json. Voz e chat usam Gemini Live quando conectado; o modo textual de reserva usa Gemini 2.5 Flash.</div>
+  <div class="note">A chave fica salva localmente em Yon/config/api_key.json. Segure Espaço para falar; solte para enviar e receber a resposta falada. O áudio só é enviado enquanto a tecla estiver pressionada.</div>
   <div class="note" id="voiceSupport">Voz: verificando suporte do navegador…</div>
  </div>
 </div>
@@ -44,7 +44,7 @@
 <script>
 (()=> {
 const $=id=>document.getElementById(id), canvas=$("scene"),ctx=canvas.getContext("2d");
-let w=0,h=0,dpr=1,tick=0,voiceActive=false,speaking=false,selectedFile=null,requestBusy=false,lastTranscriptNode=null,activeTranscript={user:null,yon:null};
+let w=0,h=0,dpr=1,tick=0,voiceActive=false,speaking=false,pttHeld=false,pttBusy=false,selectedFile=null,requestBusy=false,lastTranscriptNode=null,activeTranscript={user:null,yon:null};
 function resize(){dpr=Math.min(devicePixelRatio||1,2);w=innerWidth;h=innerHeight;canvas.width=w*dpr;canvas.height=h*dpr;canvas.style.width=w+"px";canvas.style.height=h+"px";ctx.setTransform(dpr,0,0,dpr,0,0)}
 addEventListener("resize",resize);resize();
 const orbPoints=[];
@@ -86,7 +86,7 @@ $("send").onclick=()=>{const v=$("textInput").value;$("textInput").value="";send
 $("textInput").addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();$("send").click()}});
 $("fileInput").onchange=async e=>{const f=e.target.files[0];if(!f)return;try{if(f.size>2_000_000)throw new Error("Arquivo maior que 2 MB nesta versão.");const ext=f.name.split(".").pop().toLowerCase();if(!["txt","md","csv","json","py","js","html","css","xml","yaml","yml","log"].includes(ext))throw new Error("Por enquanto, anexe arquivos de texto (TXT, MD, CSV, JSON, código).");selectedFile={name:f.name,text:await f.text()};toast("Arquivo pronto para enviar com a próxima mensagem.")}catch(err){toast(err.message);$("fileInput").value=""}};
 document.addEventListener("dragover",e=>{e.preventDefault()});document.addEventListener("drop",async e=>{e.preventDefault();const f=e.dataTransfer.files[0];if(!f)return;if(f.size>2_000_000){toast("Arquivo maior que 2 MB.");return}try{selectedFile={name:f.name,text:await f.text()};toast("Arquivo anexado: "+f.name);document.body.classList.add("chat-open")}catch(_){toast("Não consegui ler esse arquivo.")}});
-function openChat(){$("chat").classList.add("open");document.body.classList.add("chat-open");$("textInput").focus()}
+function openChat(){$("chat").classList.add("open");document.body.classList.add("chat-open")}
 function closeChat(){document.body.classList.remove("chat-open")}
 $("closeChat").onclick=closeChat;
 $("gear").onclick=async()=>{$("settings").classList.add("open");try{const r=await fetch("/api/config");const d=await r.json();$("voiceSupport").textContent="Voz: Gemini Live · "+(d.voice_running?"conectada":d.configured?"iniciando":"API ainda não configurada")}catch(_){}};
@@ -95,8 +95,34 @@ $("settings").onclick=e=>{if(e.target===$("settings"))$("settings").classList.re
 $("saveKey").onclick=async()=>{const key=$("apiKey").value.trim();if(!key){toast("Informe a chave Gemini.");return}try{const r=await fetch("/api/config",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({api_key:key})});if(!r.ok)throw new Error("Não foi possível salvar.");$("apiKey").value="";$("settings").classList.remove("open");toast("Chave salva localmente.")}catch(e){toast(e.message)}};
 async function startVoice(){try{const r=await fetch("/api/voice/start",{method:"POST"});const d=await r.json();if(!r.ok||!d.ok)throw new Error(d.error||"Não foi possível iniciar o microfone.");toast("Conectando ao Gemini Live...")}catch(e){toast(e.message)}}
 async function stopVoice(){try{await fetch("/api/voice/stop",{method:"POST"})}catch(_){}voiceActive=false;state("idle")}
-$("orbHint").textContent="T · abrir conversa  /  clique na Orb para iniciar a voz";
-canvas.addEventListener("click",()=>{if(voiceActive)stopVoice();else startVoice()});
+$("orbHint").textContent="SEGURE ESPAÇO PARA FALAR  ·  T ABRE O CHAT  ·  SEGURE A ORB NO CELULAR";
+async function waitForVoice(){for(let i=0;i<60;i++){const r=await fetch("/api/config");const d=await r.json();if(d.voice_connected){voiceActive=true;return true}await new Promise(resolve=>setTimeout(resolve,250))}throw new Error("Gemini Live não conectou. Confira a chave e a conexão.")}
+async function setPushToTalk(held){
+ if(held===pttHeld||pttBusy)return;
+ pttBusy=true;
+ try{
+  if(held){
+   if(!voiceActive){await startVoice();await waitForVoice()}
+   const r=await fetch("/api/voice/ptt",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({held:true})});
+   const d=await r.json();if(!r.ok||!d.ok)throw new Error(d.error||"Não foi possível ativar o microfone.");
+   pttHeld=true;state("listening");
+  }else{
+   if(voiceActive){await fetch("/api/voice/ptt",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({held:false})})}
+   pttHeld=false;
+  }
+ }catch(e){pttHeld=false;toast(e.message);state("idle")}
+ finally{pttBusy=false}
+}
+function editableTarget(el){return el&&((el.tagName==="INPUT")||(el.tagName==="TEXTAREA")||el.isContentEditable)}
+document.addEventListener("keydown",e=>{if(e.code==="Space"&&!editableTarget(e.target)&&!e.repeat){e.preventDefault();setPushToTalk(true)}});
+document.addEventListener("keyup",e=>{if(e.code==="Space"){e.preventDefault();setPushToTalk(false)}});
+addEventListener("blur",()=>setPushToTalk(false));
+canvas.addEventListener("pointerdown",e=>{e.preventDefault();try{canvas.setPointerCapture(e.pointerId)}catch(_){}setPushToTalk(true)});
+canvas.addEventListener("pointerup",()=>setPushToTalk(false));
+canvas.addEventListener("pointercancel",()=>setPushToTalk(false));
+canvas.addEventListener("lostpointercapture",()=>setPushToTalk(false));
+document.addEventListener("visibilitychange",()=>{if(document.hidden)setPushToTalk(false)});
+addEventListener("pagehide",()=>{if(pttHeld)navigator.sendBeacon("/api/voice/ptt",new Blob([JSON.stringify({held:false})],{type:"application/json"}));navigator.sendBeacon("/api/client/closing",new Blob([],{type:"application/octet-stream"}))});
 const events=new EventSource("/api/events");
 events.onmessage=e=>{try{const d=JSON.parse(e.data);
  if(d.type==="voice_state"){voiceActive=!["stopped","idle"].includes(d.state);speaking=d.state==="speaking";state(d.state==="connecting"||d.state==="reconnecting"?"thinking":d.state==="speaking"?"speaking":d.state==="listening"?"listening":"idle")}
@@ -105,7 +131,7 @@ events.onmessage=e=>{try{const d=JSON.parse(e.data);
  else if(d.type==="turn_complete"){lastTranscriptNode=null;activeTranscript={user:null,yon:null}}
  }catch(_){}};
 addEventListener("keydown",e=>{if(e.key==="Escape"){closeChat();$("settings").classList.remove("open")}if(e.key.toLowerCase()==="t"&&!e.repeat&&!["INPUT","TEXTAREA"].includes(document.activeElement.tagName))openChat()});
-(async()=>{try{const r=await fetch("/api/config");const d=await r.json();if(!d.configured)toast("Configure a API Gemini na engrenagem para conversar.");else startVoice()}catch(_){}})();
+(async()=>{try{const r=await fetch("/api/config");const d=await r.json();if(!d.configured)toast("Configure a API Gemini na engrenagem para conversar.");else{await startVoice();await waitForVoice();toast("Yon conectado. Segure Espaço para falar.")}}catch(e){toast(e.message)}})();
 })();
 </script>
 </body></html>
