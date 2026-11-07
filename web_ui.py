@@ -605,6 +605,15 @@ class JarvisUI:
             except OSError:
                 pass
 
+            top_items = [x for x in manifest.get("items", []) if isinstance(x, dict)]
+            if len(top_items) == 1 and str(top_items[0].get("kind") or "") == "pasta":
+                folder_name = _safe_drop_relative_path(top_items[0].get("name"))
+                self._current_file = str(root / folder_name) if folder_name else str(root)
+            elif len(top_items) == 1 and str(top_items[0].get("kind") or "") == "arquivo" and len(saved) == 1:
+                self._current_file = saved[0]["path"]
+            else:
+                self._current_file = None
+
             labels = []
             for item in manifest.get("items", [])[:100]:
                 if not isinstance(item, dict):
