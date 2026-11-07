@@ -285,6 +285,9 @@
     return Math.min(1, Math.sqrt(soma / amostras.length) * 4.5);
   }
 
+  // O microfone é capturado pelo backend Python (sounddevice), não pelo navegador.
+  // Este valor chega pelo SSE /api/eventos e alimenta a animação da orb.
+  let nivelExterno = 0;
   let nivel = 0, rot = 0, veloc = 0.002;
   const t0 = performance.now();
   const trabalhando = () => ["pensando", "transcrevendo", "aquecendo", "iniciando"].includes(estado);
@@ -292,8 +295,12 @@
   function quadro(agora) {
     const t = (agora - t0) / 1000;
     let alvo;
-    if (estado === "ouvindo") alvo = volume(analisadorMic);
-    else if (estado === "falando") alvo = volume(analisadorSaida);
+    if (estado === "ouvindo") {
+      // Mantém a orb visivelmente viva enquanto o PTT está pressionado e
+      // reage ao nível real do microfone enviado pelo backend Python.
+      const pulsoEscuta = 0.09 + 0.035 * Math.sin(t * 8);
+      alvo = Math.max(pulsoEscuta, Math.min(1, nivelExterno * 1.8));
+    } else if (estado === "falando") alvo = volume(analisadorSaida);
     else if (trabalhando()) alvo = 0.16 + 0.1 * Math.sin(t * 3.4);
     else alvo = 0.04 + 0.03 * Math.sin(t * 1.2);
     nivel += (alvo - nivel) * 0.2;
@@ -471,7 +478,9 @@
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ held: true })
       });
-      if (!r.ok) throw new Error("Não foi possível ativar o microfone.");
+      let retorno = {};
+      try { retorno = await r.clone().json(); } catch (_) {}
+      if (!r.ok) throw new Error(retorno.error || "Não foi possível ativar o microfone.");
       // A keyup/blur can happen while the HTTP request is still in flight.
       // Immediately release on the server instead of leaving PTT stuck open.
       if (!espacoPressionado || token !== pttToken) {
@@ -482,8 +491,9 @@
         return;
       }
       gravando = true;
+      nivelExterno = 0;
       mudarEstado("ouvindo");
-      diag("ptt_press", "browser space key");
+      diag("ptt_press", "browser space key; backend accepted PTT");
     } catch (erro) {
       // If the server accepted the press but the response was lost, release
       // defensively so the microphone cannot remain stuck in PTT mode.
@@ -515,8 +525,9 @@
       fetch("/api/ptt", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ held: false }), keepalive: true
-      }).catch(() => {});
+      }).catch((erro) => diag("ptt_release_error", erro && erro.message ? erro.message : erro));
     }
+    nivelExterno = 0;
     if (estado === "ouvindo") mudarEstado("pensando");
     diag("ptt_release", "browser space key");
   }
