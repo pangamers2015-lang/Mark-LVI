@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Yon</title>
+<style>
+:root{color-scheme:dark;--bg:#030506;--line:rgba(205,238,235,.13);--muted:#879493;--text:#edf7f5;--mint:#8ce8dc}
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:Inter,"Segoe UI",Arial,sans-serif}body{background:radial-gradient(ellipse at 50% 48%,#10201f 0,#071011 30%,#030506 72%)}button,input,textarea{font:inherit}button{cursor:pointer}
+#scene{position:fixed;inset:0;width:100%;height:100%;z-index:0}
+.topline{position:fixed;z-index:2;top:25px;left:30px;right:30px;display:flex;align-items:center;justify-content:space-between;color:#9aa9a7;font-size:11px;letter-spacing:.28em;text-transform:uppercase;pointer-events:none}.brand{font-weight:600;color:#e7f5f2}.status{display:flex;align-items:center;gap:9px;letter-spacing:.14em}.dot{width:6px;height:6px;border-radius:50%;background:#7eddd1;box-shadow:0 0 12px #7eddd1;opacity:.55}body[data-state="listening"] .dot,body[data-state="speaking"] .dot{opacity:1}
+#gear{position:fixed;z-index:8;right:22px;top:17px;width:40px;height:40px;border:1px solid transparent;border-radius:50%;background:transparent;color:#9aacab;font-size:20px;opacity:.35;transition:.2s}#gear:hover{opacity:1;background:#ffffff0d;border-color:var(--line);transform:rotate(25deg)}
+#orbHint{position:fixed;z-index:2;left:50%;bottom:8%;transform:translateX(-50%);font-size:10px;letter-spacing:.2em;color:#6f8280;text-transform:uppercase;white-space:nowrap;pointer-events:none}
+#chat{position:fixed;z-index:5;right:24px;top:78px;bottom:26px;width:min(430px,calc(100vw - 32px));display:flex;flex-direction:column;background:rgba(5,12,13,.88);border:1px solid var(--line);border-radius:18px;backdrop-filter:blur(22px);box-shadow:0 24px 90px #0009;transform:translateX(calc(100% + 40px));transition:transform .32s cubic-bezier(.2,.8,.2,1)}body.chat-open #chat{transform:translateX(0)}.chat-head{height:58px;flex:none;padding:0 18px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);font-size:11px;letter-spacing:.2em;text-transform:uppercase}.chat-head button,.iconbtn{border:0;background:transparent;color:#9eaeac;font-size:19px}.messages{padding:18px;overflow:auto;flex:1;display:flex;flex-direction:column;gap:13px;scrollbar-width:thin;scrollbar-color:#263635 transparent}.msg{max-width:92%;padding:11px 13px;border:1px solid var(--line);border-radius:13px;background:#ffffff08;white-space:pre-wrap;line-height:1.5;font-size:13px;overflow-wrap:anywhere}.msg.user{align-self:flex-end;background:#14302e;border-color:#366c65}.msg.yon{align-self:flex-start}.msg.system{align-self:center;border:0;background:transparent;color:#849390;font-size:11px}.composer{padding:12px;border-top:1px solid var(--line);display:grid;grid-template-columns:1fr auto;gap:8px}.composer textarea{resize:none;min-height:46px;max-height:120px;padding:12px;background:#0a1515;border:1px solid var(--line);border-radius:11px;color:var(--text);outline:none}.send{width:46px;border:1px solid #427e76;border-radius:11px;background:#183b37;color:#dffaf5}.attach{grid-column:1/-1;display:flex;align-items:center;gap:8px;color:#849390;font-size:11px}.attach input{max-width:100%;font-size:11px}
+#settings{position:fixed;z-index:12;inset:0;background:#0009;backdrop-filter:blur(12px);display:none;align-items:center;justify-content:center;padding:16px}#settings.open{display:flex}.settings-card{width:min(430px,100%);padding:22px;border:1px solid var(--line);border-radius:17px;background:#081011;box-shadow:0 30px 100px #000b}.settings-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:22px;font-size:12px;letter-spacing:.2em;text-transform:uppercase}.settings-card label{display:block;color:#a6b8b5;font-size:12px;margin:14px 0 7px}.settings-card input{width:100%;padding:12px;border:1px solid var(--line);border-radius:9px;background:#030909;color:var(--text)}.primary{margin-top:16px;padding:11px 15px;border:1px solid #447e76;border-radius:9px;background:#153a35;color:#e9fffb}.note{font-size:11px;color:#7f908d;line-height:1.5;margin-top:13px}
+#toast{position:fixed;z-index:20;left:50%;bottom:22px;transform:translate(-50%,20px);opacity:0;pointer-events:none;padding:10px 14px;border:1px solid var(--line);border-radius:10px;background:#091212;color:#d8e9e6;font-size:12px;transition:.2s}#toast.show{opacity:1;transform:translate(-50%,0)}
+@media(max-width:650px){.topline{left:17px;right:60px;top:18px}#chat{left:12px;right:12px;top:66px;bottom:12px;width:auto}#orbHint{bottom:5%;font-size:9px}}
+</style>
+</head>
+<body data-state="idle">
+<canvas id="scene"></canvas>
+<div class="topline"><span class="brand">Y O N</span><span class="status"><i class="dot"></i><span id="stateText">PRONTO</span></span></div>
+<button id="gear" title="Configurações" aria-label="Configurações">⚙</button>
+<div id="orbHint">T · abrir conversa &nbsp; / &nbsp; fale para interromper</div>
+<aside id="chat" aria-label="Conversa">
+ <div class="chat-head"><span>Conversa</span><button id="closeChat" aria-label="Fechar chat">×</button></div>
+ <div class="messages" id="messages" aria-live="polite"><div class="msg system">Yon está pronto. Configure a chave Gemini na engrenagem para começar.</div></div>
+ <div class="composer">
+  <textarea id="textInput" rows="1" placeholder="Escreva uma mensagem... (Enter envia)"></textarea>
+  <button class="send" id="send">↑</button>
+  <label class="attach">＋ Anexar arquivo <input id="fileInput" type="file"></label>
+ </div>
+</aside>
+<div id="settings">
+ <div class="settings-card">
+  <div class="settings-top"><span>Configurações</span><button class="iconbtn" id="closeSettings">×</button></div>
+  <label for="apiKey">Chave da API Gemini</label><input id="apiKey" type="password" autocomplete="off" placeholder="Cole sua chave API">
+  <button class="primary" id="saveKey">Salvar chave</button>
+  <div class="note">A chave fica salva localmente em Yon/config/api_key.json e não é enviada ao navegador. Modelo de conversa: Gemini 2.5 Flash.</div>
+  <div class="note" id="voiceSupport">Voz: verificando suporte do navegador…</div>
+ </div>
+</div>
+<div id="toast"></div>
+<script>
+(()=> {
+const $=id=>document.getElementById(id), canvas=$("scene"),ctx=canvas.getContext("2d");
+let w=0,h=0,dpr=1,tick=0,voiceActive=false,recognition=null,speaking=false,selectedFile=null,requestBusy=false;
+function resize(){dpr=Math.min(devicePixelRatio||1,2);w=innerWidth;h=innerHeight;canvas.width=w*dpr;canvas.height=h*dpr;canvas.style.width=w+"px";canvas.style.height=h+"px";ctx.setTransform(dpr,0,0,dpr,0,0)}
+addEventListener("resize",resize);resize();
+function orb(){
+ tick+=.012;ctx.clearRect(0,0,w,h);const cx=w*.5,cy=h*.46,r=Math.min(w,h)*.205;
+ const glow=ctx.createRadialGradient(cx,cy,4,cx,cy,r*1.8);glow.addColorStop(0,"rgba(94,220,205,.12)");glow.addColorStop(.55,"rgba(44,126,121,.055)");glow.addColorStop(1,"rgba(0,0,0,0)");ctx.fillStyle=glow;ctx.fillRect(cx-r*2,cy-r*2,r*4,r*4);
+ const pulse=1+Math.sin(tick*2.2)*.018+(speaking?.025:0)+(voiceActive?.012:0);
+ for(let ring=0;ring<5;ring++){ctx.beginPath();ctx.ellipse(cx,cy,r*(.7+ring*.12)*pulse,r*(.83+ring*.085)*pulse,Math.sin(tick*.3)*.08,0,Math.PI*2);ctx.strokeStyle="rgba(145,235,225,"+(.12-ring*.017)+")";ctx.lineWidth=1;ctx.stroke()}
+ for(let i=0;i<9;i++){const a=tick*.22+i*Math.PI*2/9;const x=cx+Math.cos(a)*r*.88,y=cy+Math.sin(a)*r*.78;ctx.beginPath();ctx.arc(x,y,1.5+(i%3)*.4,0,Math.PI*2);ctx.fillStyle="rgba(188,255,245,.6)";ctx.shadowBlur=12;ctx.shadowColor="#74dfd4";ctx.fill();ctx.shadowBlur=0}
+ const core=ctx.createRadialGradient(cx-r*.22,cy-r*.28,2,cx,cy,r*.78);core.addColorStop(0,"rgba(235,255,251,.19)");core.addColorStop(.3,"rgba(121,218,208,.09)");core.addColorStop(.72,"rgba(47,130,126,.035)");core.addColorStop(1,"rgba(2,10,12,0)");ctx.fillStyle=core;ctx.beginPath();ctx.ellipse(cx,cy,r*.72*pulse,r*.84*pulse,0,0,Math.PI*2);ctx.fill();
+ ctx.beginPath();ctx.ellipse(cx,cy,r*.72*pulse,r*.84*pulse,0,0,Math.PI*2);ctx.strokeStyle="rgba(188,255,248,.42)";ctx.lineWidth=1.2;ctx.shadowBlur=20;ctx.shadowColor="#62cfc4";ctx.stroke();ctx.shadowBlur=0;
+ requestAnimationFrame(orb)
+}requestAnimationFrame(orb);
+function toast(s){$("toast").textContent=s;$("toast").classList.add("show");setTimeout(()=>$("toast").classList.remove("show"),2600)}
+function addMessage(text,who){const d=document.createElement("div");d.className="msg "+who;d.textContent=text;$("messages").appendChild(d);$("messages").scrollTop=$("messages").scrollHeight;return d}
+function state(s){document.body.dataset.state=s;$("stateText").textContent=({idle:"PRONTO",listening:"OUVINDO",thinking:"PENSANDO",speaking:"FALANDO"})[s]||"PRONTO"}
+function stopSpeech(){if("speechSynthesis"in window)speechSynthesis.cancel();speaking=false;state(voiceActive?"listening":"idle")}
+function speak(text){if(!("speechSynthesis"in window))return;stopSpeech();const u=new SpeechSynthesisUtterance(text);u.lang="pt-BR";u.rate=1.02;u.pitch=1.0;u.onstart=()=>{speaking=true;state("speaking")};u.onend=()=>{speaking=false;state(voiceActive?"listening":"idle")};u.onerror=()=>{speaking=false;state("idle")};speechSynthesis.speak(u)}
+async function sendMessage(text,fromVoice=false){
+ text=(text||"").trim();if(!text||requestBusy)return;
+ stopSpeech();requestBusy=true;state("thinking");addMessage(text,"user");
+ const payload={message:text};if(selectedFile){payload.attachment=selectedFile;addMessage("Arquivo anexado: "+selectedFile.name,"system");selectedFile=null;$("fileInput").value=""}
+ try{const r=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});const d=await r.json();if(!r.ok||!d.ok)throw new Error(d.error||"Falha ao conversar.");addMessage(d.answer,"yon");if(fromVoice)speak(d.answer);else state(voiceActive?"listening":"idle")}
+ catch(e){addMessage("Não consegui concluir: "+e.message,"system");toast(e.message);state("idle")}
+ finally{requestBusy=false}
+}
+$("send").onclick=()=>{const v=$("textInput").value;$("textInput").value="";sendMessage(v,false)};
+$("textInput").addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();$("send").click()}});
+$("fileInput").onchange=async e=>{const f=e.target.files[0];if(!f)return;try{if(f.size>2_000_000)throw new Error("Arquivo maior que 2 MB nesta versão.");const ext=f.name.split(".").pop().toLowerCase();if(!["txt","md","csv","json","py","js","html","css","xml","yaml","yml","log"].includes(ext))throw new Error("Por enquanto, anexe arquivos de texto (TXT, MD, CSV, JSON, código).");selectedFile={name:f.name,text:await f.text()};toast("Arquivo pronto para enviar com a próxima mensagem.")}catch(err){toast(err.message);$("fileInput").value=""}};
+document.addEventListener("dragover",e=>{e.preventDefault()});document.addEventListener("drop",async e=>{e.preventDefault();const f=e.dataTransfer.files[0];if(!f)return;if(f.size>2_000_000){toast("Arquivo maior que 2 MB.");return}try{selectedFile={name:f.name,text:await f.text()};toast("Arquivo anexado: "+f.name);document.body.classList.add("chat-open")}catch(_){toast("Não consegui ler esse arquivo.")}});
+function openChat(){$("chat").classList.add("open");document.body.classList.add("chat-open");$("textInput").focus()}
+function closeChat(){document.body.classList.remove("chat-open")}
+$("closeChat").onclick=closeChat;
+$("gear").onclick=async()=>{$("settings").classList.add("open");try{const r=await fetch("/api/config");const d=await r.json();$("voiceSupport").textContent="Voz: "+(window.SpeechRecognition||window.webkitSpeechRecognition?"reconhecimento disponível":"reconhecimento não suportado neste navegador")+" · "+(d.configured?"API configurada":"API ainda não configurada")}catch(_){}};
+$("closeSettings").onclick=()=>$("settings").classList.remove("open");
+$("settings").onclick=e=>{if(e.target===$("settings"))$("settings").classList.remove("open")};
+$("saveKey").onclick=async()=>{const key=$("apiKey").value.trim();if(!key){toast("Informe a chave Gemini.");return}try{const r=await fetch("/api/config",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({api_key:key})});if(!r.ok)throw new Error("Não foi possível salvar.");$("apiKey").value="";$("settings").classList.remove("open");toast("Chave salva localmente.")}catch(e){toast(e.message)}};
+function startVoice(){
+ const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){toast("Use Chrome ou Edge para reconhecimento de voz.");return}
+ if(recognition)return;
+ recognition=new SR();recognition.lang="pt-BR";recognition.continuous=true;recognition.interimResults=true;recognition.maxAlternatives=1;
+ let finalText="",sendTimer=null;
+ recognition.onstart=()=>{voiceActive=true;state("listening")};
+ recognition.onresult=e=>{let interim="";for(let i=e.resultIndex;i<e.results.length;i++){const part=e.results[i][0].transcript;if(e.results[i].isFinal)finalText+=" "+part;else interim+=part}
+ if(interim&&speaking)stopSpeech();
+ if(finalText.trim()){clearTimeout(sendTimer);sendTimer=setTimeout(()=>{const text=finalText.trim();finalText="";if(text)sendMessage(text,true)},950)}
+ };
+ recognition.onerror=e=>{if(e.error!=="no-speech"&&e.error!=="aborted")toast("Microfone: "+e.error)};
+ recognition.onend=()=>{recognition=null;if(voiceActive){setTimeout(startVoice,350)}else state("idle")};
+ try{recognition.start()}catch(_){recognition=null}
+}
+function stopVoice(){voiceActive=false;if(recognition){const r=recognition;recognition=null;try{r.onend=null;r.stop()}catch(_){}}stopSpeech();state("idle")}
+$("orbHint").textContent="T · abrir conversa  /  clique na Orb para iniciar a voz";
+canvas.addEventListener("click",()=>{if(voiceActive)stopVoice();else startVoice()});
+addEventListener("keydown",e=>{if(e.key==="Escape"){closeChat();$("settings").classList.remove("open")}if(e.key.toLowerCase()==="t"&&!e.repeat&&!["INPUT","TEXTAREA"].includes(document.activeElement.tagName))openChat()});
+(async()=>{try{const r=await fetch("/api/config");const d=await r.json();if(!d.configured)toast("Configure a API Gemini na engrenagem para conversar.")}catch(_){}})();
+})();
+</script>
+</body></html>
