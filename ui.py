@@ -432,6 +432,17 @@ class HudCanvas(QWidget):
         except Exception:
             self.hud_style = "face"
         self._core_phase = 0.0
+        # Fibonacci sphere: stable, evenly distributed particles, matching the
+        # reference orb without importing its unrelated voice/backend code.
+        self._orb_points = []
+        _golden = math.pi * (3.0 - math.sqrt(5.0))
+        for _i in range(1500):
+            _yy = 1.0 - (2.0 * (_i + 0.5) / 1500.0)
+            _rr = math.sqrt(max(0.0, 1.0 - _yy * _yy))
+            _aa = _golden * _i
+            self._orb_points.append((_rr * math.cos(_aa), _yy,
+                                     _rr * math.sin(_aa),
+                                     random.random() * math.tau))
 
         self._tick       = 0
         self._scale      = 1.0
@@ -839,6 +850,49 @@ class HudCanvas(QWidget):
             p.drawText(QRectF(cx - r, cy - fsz, r * 2, fsz * 2),
                        Qt.AlignmentFlag.AlignCenter, name)
 
+    def _paint_particle_orb(self, p: QPainter, cx: float, cy: float, radius: float):
+        """White 3-D particle sphere, driven by the HUD's real audio envelope."""
+        amp = max(0.0, min(1.0, self._amp_disp))
+        t = self._core_phase
+        working = self.state in ("THINKING", "PROCESSING")
+        speed = 0.20 if not working and not self.speaking else (0.48 if working else 0.72)
+        angle = t * speed
+        ca, sa = math.cos(angle), math.sin(angle)
+        tilt = 0.42
+        ct, st = math.cos(tilt), math.sin(tilt)
+        pulse = 1.0 + (0.16 * amp if self.speaking else 0.09 * amp)
+        pulse += 0.012 * math.sin(t * 1.25)
+        # Soft white aura, kept monochrome like the reference.
+        glow = QRadialGradient(cx, cy, radius * 1.08)
+        glow.setColorAt(0.0, QColor(255, 255, 255, 18 + int(amp * 20)))
+        glow.setColorAt(0.58, QColor(255, 255, 255, 7))
+        glow.setColorAt(1.0, QColor(0, 0, 0, 0))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QBrush(glow))
+        p.drawEllipse(QRectF(cx-radius*1.08, cy-radius*1.08,
+                             radius*2.16, radius*2.16))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        for x, y, z, phase in self._orb_points:
+            # Gentle travelling waves; stronger movement while audio is active.
+            wave = 1.0 + amp * 0.13 * math.sin(phase + t * 5.2 + y * 4.0)
+            wave += 0.012 * math.sin(phase * 1.7 + t * 0.8)
+            xx, zz = x * ca - z * sa, x * sa + z * ca
+            yy = y * ct - zz * st
+            depth = y * st + zz * ct
+            perspective = 1.0 / (1.0 + depth * 0.12)
+            px = cx + xx * radius * pulse * wave * perspective
+            py = cy + yy * radius * pulse * wave * perspective
+            front = (depth + 1.0) * 0.5
+            alpha = int(48 + front * 190)
+            size = 0.65 + front * 1.25
+            if self.muted:
+                alpha = int(alpha * 0.58)
+            elif self.speaking or amp > 0.025:
+                alpha = min(255, int(alpha * (0.78 + amp * 0.55)))
+            p.setPen(QPen(QColor(255, 255, 255, max(18, min(255, alpha))),
+                          size, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+            p.drawPoint(QPointF(px, py))
+
     def paintEvent(self, _):
         p = QPainter(self)
         if not p.isActive():      # device not ready (e.g. 0-size during layout) — skip cleanly
@@ -850,13 +904,13 @@ class HudCanvas(QWidget):
         cx, cy = W / 2, H / 2
         fw = min(W, H)
 
-        # grid dots — blitted from a cached layer; rebuilt only when the size
-        # or the theme's ghost colour changes (so live re-theming still works).
-        _gkey = (W, H, C.PRI_GHO)
-        if self._grid_cache is None or self._grid_key != _gkey:
-            self._grid_cache = self._make_grid(W, H)
-            self._grid_key   = _gkey
-        p.drawPixmap(0, 0, self._grid_cache)
+        # The reference orb uses a pure black field, without the legacy grid.
+        if self.hud_style != "orb":
+            _gkey = (W, H, C.PRI_GHO)
+            if self._grid_cache is None or self._grid_key != _gkey:
+                self._grid_cache = self._make_grid(W, H)
+                self._grid_key   = _gkey
+            p.drawPixmap(0, 0, self._grid_cache)
 
         # ── holographic head ────────────────────────────────────────────────
         # Sized to the band between the top of the canvas and the status line,
@@ -891,7 +945,13 @@ class HudCanvas(QWidget):
             _band_t = 12.0
             _band_h = max(60.0, _sy_status - 12.0 - _band_t)
             _r = min(W * 0.46, _band_h / 2.0)
-            self._paint_core(p, cx, _band_t + _band_h / 2.0, _r, W, _band_h)
+            if self.hud_style == "orb":
+                self._paint_particle_orb(
+                    p, cx, _band_t + _band_h / 2.0,
+                    min(fw * 0.205, _band_h * 0.43)
+                )
+            else:
+                self._paint_core(p, cx, _band_t + _band_h / 2.0, _r, W, _band_h)
 
         # status text
         sy = _sy_status
@@ -5657,33 +5717,43 @@ class MainWindow(QMainWindow):
             return "◎"
         if any(x in value for x in ("arquivo", "windows", "aplicativo", "programa")):
             return "▣"
+        if any(x in value for x in ("pesquisa", "internet", "site", "navegador", "web")):
+            return "⌕"
+        if any(x in value for x in ("mensagem", "email", "e-mail", "chat")):
+            return "✉"
+        if any(x in value for x in ("música", "musica", "áudio", "audio", "som")):
+            return "♫"
+        if any(x in value for x in ("código", "codigo", "python", "desenvolvimento")):
+            return "⌘"
+        if any(x in value for x in ("foto", "imagem", "vídeo", "video")):
+            return "▧"
         return "✦"
 
     def _build_immersive_overlay(self, parent: QWidget) -> None:
         self._status_pill = QFrame(parent)
-        self._status_pill.setStyleSheet("QFrame { background:rgba(12,16,18,232); border:1px solid #425156; border-radius:27px; }")
+        self._status_pill.setStyleSheet("QFrame { background:rgba(0,0,0,220); border:1px solid rgba(255,255,255,65); border-radius:27px; }")
         pill = QHBoxLayout(self._status_pill)
         pill.setContentsMargins(15, 7, 17, 7)
         pill.setSpacing(10)
         orb = QLabel("◉")
-        orb.setStyleSheet("color:#62ddcf; font-size:23px; background:transparent; border:0;")
+        orb.setStyleSheet("color:#ffffff; font-size:23px; background:transparent; border:0;")
         pill.addWidget(orb)
         names = QVBoxLayout()
         names.setSpacing(0)
         name = QLabel(self._assistant_name.upper())
         name.setStyleSheet("color:#ffffff; font-size:16px; font-weight:700; letter-spacing:4px; background:transparent; border:0;")
         self._status_state = QLabel("● pronto")
-        self._status_state.setStyleSheet("color:#62ddcf; font-size:11px; letter-spacing:1px; background:transparent; border:0;")
+        self._status_state.setStyleSheet("color:rgba(255,255,255,175); font-size:11px; letter-spacing:1px; background:transparent; border:0;")
         names.addWidget(name)
         names.addWidget(self._status_state)
         pill.addLayout(names, 1)
         self._status_bars = QLabel("▂ ▄ ▆ ▇ ▅")
-        self._status_bars.setStyleSheet("color:#62ddcf; font-size:14px; letter-spacing:1px; background:transparent; border:0;")
+        self._status_bars.setStyleSheet("color:#ffffff; font-size:14px; letter-spacing:1px; background:transparent; border:0;")
         pill.addWidget(self._status_bars)
         self._status_pill.show()
 
         self._context_popup = QFrame(parent)
-        self._context_popup.setStyleSheet("QFrame { background:rgba(13,16,18,242); border:1px solid #3c4b50; border-radius:22px; }")
+        self._context_popup.setStyleSheet("QFrame { background:rgba(0,0,0,242); border:1px solid rgba(255,255,255,75); border-radius:18px; }")
         popup_layout = QVBoxLayout(self._context_popup)
         popup_layout.setContentsMargins(18, 16, 18, 16)
         popup_layout.setSpacing(9)
@@ -5691,7 +5761,7 @@ class MainWindow(QMainWindow):
         self._context_icon = QLabel("✦")
         self._context_icon.setFixedSize(56, 56)
         self._context_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._context_icon.setStyleSheet("color:#62ddcf; font-size:30px; background:#20282b; border:1px solid #344348; border-radius:14px;")
+        self._context_icon.setStyleSheet("color:#ffffff; font-size:30px; background:#111111; border:1px solid rgba(255,255,255,65); border-radius:14px;")
         header.addWidget(self._context_icon)
         self._context_title = QLabel("Informações do Yon")
         self._context_title.setWordWrap(True)
@@ -5701,7 +5771,7 @@ class MainWindow(QMainWindow):
         self._context_body = QTextEdit()
         self._context_body.setReadOnly(True)
         self._context_body.setFrameShape(QFrame.Shape.NoFrame)
-        self._context_body.setStyleSheet("QTextEdit { color:#d0d8d9; background:transparent; border:0; font-size:13px; selection-background-color:#285b56; }")
+        self._context_body.setStyleSheet("QTextEdit { color:rgba(255,255,255,205); background:transparent; border:0; font-size:13px; selection-background-color:#444444; }")
         self._context_body.setMinimumHeight(130)
         popup_layout.addWidget(self._context_body)
         self._context_popup.hide()
@@ -5747,9 +5817,34 @@ class MainWindow(QMainWindow):
         if self._task_overlay_host.isVisible():
             self._task_overlay_host.raise_()
         if self._context_popup.isVisible():
-            cw = min(470, max(330, int(w*0.38)))
-            ch = min(390, max(230, int(h*0.52)))
-            self._context_popup.setGeometry(w-cw-28, max(110, (h-ch)//2), cw, ch)
+            cw = min(430, max(300, int(w*0.34)))
+            ch = min(330, max(205, int(h*0.43)))
+            # Candidate anchors around the screen. Avoid the top status capsule
+            # and the task stack; randomise with a small anti-repeat preference.
+            margin = 24
+            candidates = [
+                (margin, 104), (w-cw-margin, 104),
+                (margin, h-ch-margin), (w-cw-margin, h-ch-margin),
+                (margin, max(110, (h-ch)//2)),
+                (w-cw-margin, max(110, (h-ch)//2)),
+                (max(margin, (w-cw)//2), 98),
+                (max(margin, (w-cw)//2), h-ch-margin),
+            ]
+            safe = [(x, y) for x, y in candidates
+                    if x >= 0 and y >= 82 and x+cw <= w-margin
+                    and y+ch <= h-margin]
+            if not safe:
+                safe = [(max(margin, w-cw-margin),
+                         max(92, min(h-ch-margin, (h-ch)//2)))]
+            previous = getattr(self, "_context_popup_slot", None)
+            choices = [pt for pt in safe if pt != previous] or safe
+            slot = random.choice(choices)
+            self._context_popup_slot = slot
+            target = QRect(*slot, cw, ch)
+            if self._context_popup.geometry().isNull():
+                self._context_popup.setGeometry(target)
+            else:
+                self._context_popup.setGeometry(target)
             self._context_popup.raise_()
 
     def resizeEvent(self, event) -> None:
