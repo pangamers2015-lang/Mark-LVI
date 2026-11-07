@@ -1101,6 +1101,7 @@ class LogWidget(QTextEdit):
         self._pos     = 0
         self._tag     = "sys"
         self._ai_name_lc = "jarvis"   # updated when assistant name changes
+        self._stream_active = False
         self._tmr = QTimer(self)
         self._tmr.timeout.connect(self._step)
         self._sig.connect(self._enqueue)
@@ -1108,12 +1109,80 @@ class LogWidget(QTextEdit):
     def append_log(self, text: str):
         self._sig.emit(text)
 
+    def _tag_for(self, text: str) -> str:
+        tl = str(text or "").lower()
+        _ai_pfx = f"{self._ai_name_lc}:"
+        if tl.startswith("you:"):
+            return "you"
+        if tl.startswith(_ai_pfx) or tl.startswith("jarvis:"):
+            return "ai"
+        if tl.startswith("file:"):
+            return "file"
+        if "err" in tl:
+            return "err"
+        return "sys"
+
+    def _insert_immediate(self, text: str, tag: str) -> None:
+        if not text:
+            return
+        cur = self.textCursor()
+        fmt = cur.charFormat()
+        col = {
+            "you": qcol(C.WHITE),
+            "ai": qcol(C.PRI),
+            "err": qcol(C.RED),
+            "file": qcol(C.GREEN),
+            "sys": qcol(C.TEXT_MED),
+        }.get(tag, qcol(C.TEXT))
+        fmt.setForeground(QBrush(col))
+        cur.movePosition(cur.MoveOperation.End)
+        cur.insertText(str(text), fmt)
+        self.setTextCursor(cur)
+        self.ensureCursorVisible()
+
+    def _flush_pending(self) -> None:
+        """Finish queued typewriter text before opening a live transcript line."""
+        self._tmr.stop()
+        if self._typing:
+            self._insert_immediate(self._text[self._pos:], self._tag)
+            self._insert_immediate("\\n", self._tag)
+        self._typing = False
+        self._text = ""
+        self._pos = 0
+        while self._queue:
+            line = self._queue.pop(0)
+            tag = self._tag_for(line)
+            self._insert_immediate(line, tag)
+            self._insert_immediate("\\n", tag)
+
+    def append_streaming_text(self, text: str, prefix: str = "") -> None:
+        """Append one assistant transcript chunk to a single live log entry."""
+        if not text:
+            return
+        if not self._stream_active:
+            self._flush_pending()
+            self._insert_immediate(prefix or f"{self._ai_name_lc.upper()}: ", "ai")
+            self._stream_active = True
+        self._insert_immediate(str(text), "ai")
+
+    def finish_streaming_text(self) -> None:
+        """Close the live transcript line and resume ordinary queued log entries."""
+        if not self._stream_active:
+            return
+        self._insert_immediate("\\n", "ai")
+        self._stream_active = False
+        if self._queue and not self._typing:
+            self._next()
+
     def _enqueue(self, text: str):
         self._queue.append(text)
-        if not self._typing:
+        if not self._typing and not self._stream_active:
             self._next()
 
     def _next(self):
+        if self._stream_active:
+            self._typing = False
+            return
         if not self._queue:
             self._typing = False
             return
@@ -4534,6 +4603,8 @@ class MainWindow(QMainWindow):
     _log_sig        = pyqtSignal(str)
     _state_sig      = pyqtSignal(str)
     _content_sig    = pyqtSignal(str, str)   # (title, text) — thread-safe content display
+    _speech_caption_sig = pyqtSignal(str)    # live assistant transcript chunk
+    _speech_caption_finish_sig = pyqtSignal()
     _tasks_sig      = pyqtSignal(object)     # background-task snapshots from worker loop
     _codejob_sig    = pyqtSignal(object)     # dev_agent job state — live coding panel
     _reconfig_sig   = pyqtSignal()           # trigger setup overlay from any thread
@@ -4845,6 +4916,8 @@ class MainWindow(QMainWindow):
         self._log_sig.connect(self._log.append_log)
         self._state_sig.connect(self._apply_state)
         self._content_sig.connect(self._show_content)
+        self._speech_caption_sig.connect(self._show_speech_caption)
+        self._speech_caption_finish_sig.connect(self._finish_speech_caption)
         self._tasks_sig.connect(self._show_background_tasks)
         self._codejob_sig.connect(self._show_code_job)
         self._reconfig_sig.connect(self._show_setup)
@@ -6367,6 +6440,15 @@ class MainWindow(QMainWindow):
 
         return w
 
+    def _show_speech_caption(self, text: str) -> None:
+        """Append a Gemini output-transcription chunk to the live conversation log."""
+        self._log.append_streaming_text(
+            str(text or ""), prefix=f"{self._assistant_name}: ")
+
+    def _finish_speech_caption(self) -> None:
+        """Finish the assistant's live transcript without adding a duplicate log line."""
+        self._log.finish_streaming_text()
+
     def _show_content(self, title: str, text: str):
         """Show a stable contextual card, then dismiss it after a readable interval."""
         self.hud.glance(0.0, -0.85, hold=1.3)
@@ -7821,6 +7903,15 @@ class JarvisUI:
     def show_content(self, title: str, text: str):
         """Thread-safe: display content in the panel below the HUD."""
         self._win._content_sig.emit(title[:48], text[:4000])
+
+    def show_speech_caption(self, text: str) -> None:
+        """Thread-safe: display each assistant speech-transcription chunk as it arrives."""
+        if text:
+            self._win._speech_caption_sig.emit(str(text))
+
+    def finish_speech_caption(self) -> None:
+        """Thread-safe: close the current assistant transcript line."""
+        self._win._speech_caption_finish_sig.emit()
 
     def show_code_job(self, job: dict) -> None:
         """Thread-safe: draw the coding agent's live progress in the panel."""
