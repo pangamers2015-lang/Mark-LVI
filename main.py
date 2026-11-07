@@ -1848,7 +1848,7 @@ class JarvisLive:
                     return
                 self._audio_callbacks_active += 1
             try:
-                self._process_audio_callback(indata, frames, time_info, status)
+                _process_audio_callback(indata, frames, time_info, status)
             finally:
                 with self._audio_capture_condition:
                     self._audio_callbacks_active = max(0, self._audio_callbacks_active - 1)
