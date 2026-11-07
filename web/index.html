@@ -821,7 +821,7 @@
 
   // ---------------------------------------------------------- notificações e confirmação do Yon
   function inserirTextoComLinks(container, texto) {
-    const regex = /https?:\\/\\/[^\\s<>"']+/gi;
+    const regex = /https?:\/\/[^\s<>"']+/gi;
     const source = String(texto || "");
     let cursor = 0, match;
     while ((match = regex.exec(source)) !== null) {
