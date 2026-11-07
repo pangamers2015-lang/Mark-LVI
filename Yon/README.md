@@ -9,7 +9,7 @@ Este diretório é a raiz isolada do novo projeto Yon. O cérebro autônomo aind
 - Engrenagem para configurar a chave da API Gemini.
 - Entrada de texto, envio com Enter e leitura de anexos de texto comuns.
 - Transcrição de entrada e saída exibida dentro do chat, sem texto sobreposto à Orb.
-- Sessão Gemini Live conectada ao iniciar, com microfone em push-to-talk: só envia áudio enquanto Espaço está pressionado; soltar envia `audio_stream_end` para concluir a fala.
+- Sessão Gemini Live conectada ao iniciar; o dispositivo de microfone só é aberto enquanto Espaço está pressionado. Soltar fecha a captura e envia `audio_stream_end` para concluir a fala. No celular, toque e segure a Orb.
 - Segurar Espaço durante a resposta interrompe a reprodução e começa a capturar a fala do usuário.
 - Reconexão automática da sessão de voz após uma queda.
 
@@ -37,7 +37,7 @@ pip install -r requirements.txt
 python app.py
 ```
 
-Na primeira execução, abra a engrenagem e salve uma chave válida da API Gemini. A chave é gravada localmente em `config/api_key.json`, ignorada pelo Git. A interface abre em `http://127.0.0.1:8765`.
+Na primeira execução, abra a engrenagem e salve uma chave válida da API Gemini. A chave é gravada localmente em `config/api_key.json`, ignorada pelo Git. A interface abre em `http://127.0.0.1:8765`. Para iniciar com duplo clique, use `INICIAR.bat`.
 
 ## Dependências
 
