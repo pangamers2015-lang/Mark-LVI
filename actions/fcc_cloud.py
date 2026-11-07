@@ -145,8 +145,7 @@ TOOL = {
         "at the next safe conversational pause. Use background_tasks only when the user "
         "explicitly asks for task status or an earlier retrieval. Do not claim completion "
         "until the task reports completed, and inspect or test resulting changes before "
-        "relying on them. Never 
-        "request or expose API keys or authentication tokens."
+        "relying on them. Never request or expose API keys or authentication tokens."
     ),
     "brief": "Delegate a programming, investigation, or web research task to FCC Cloud.",
     "tier": "core",
