@@ -61,6 +61,7 @@ from memory.learning_store import (
     learn_from_user_text, format_learning_for_prompt,
 )
 from memory.continuity_store import record_turn, format_recent_context
+from memory.cognitive_store import format_cognitive_context
 
 # The file-backed tools (open_app, web_search, browser_control, …) are no longer
 # imported or declared here — they self-describe via a TOOL dict in their own
@@ -1377,6 +1378,7 @@ class JarvisLive:
         mem_str    = format_memory_for_prompt(memory)
         learning_str = format_learning_for_prompt()
         continuity_str = format_recent_context()
+        cognitive_str = format_cognitive_context()
         sys_prompt = _load_system_prompt()
 
         # Use the host's local timezone and include an unambiguous ISO timestamp.
@@ -1465,6 +1467,8 @@ class JarvisLive:
             parts.append(learning_str)
         if continuity_str:
             parts.append(continuity_str)
+        if cognitive_str:
+            parts.append(cognitive_str)
         parts.append(sys_prompt)
 
         cfg = dict(
