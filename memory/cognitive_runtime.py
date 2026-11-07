@@ -104,11 +104,11 @@ def index_memory(memory_id):
     model=_embedder()
     if model is None: return False
     try:
-        item=next((x for x in store.search_memories("",limit=500)
-                   if int(x["id"])==int(memory_id)),None)
+        with _LOCK,closing(_db()) as conn:
+            item=conn.execute("SELECT content FROM memories WHERE id=?",(int(memory_id),)).fetchone()
         if not item: return False
         import numpy as np
-        vector=model.encode([item["content"]],normalize_embeddings=True)[0]
+        vector=model.encode([item[0]],normalize_embeddings=True)[0]
         with _LOCK,closing(_db()) as conn,conn:
             conn.execute("""INSERT INTO memory_embeddings
               (memory_id,model,vector,dimensions,updated_at) VALUES(?,?,?,?,?)
