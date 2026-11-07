@@ -30,6 +30,7 @@ class LiveVoice:
         self._session = None
         self._stop = threading.Event()
         self._speaking = threading.Event()
+        self._turn_complete = True
         self._connected = threading.Event()
         self._mic_queue = None
         self._stop_event = None
@@ -90,6 +91,10 @@ class LiveVoice:
             except Exception as exc:
                 if not self._stop.is_set():
                     self.emit({"type": "voice_error", "text": str(exc)[:600]})
+                    self.emit({"type": "voice_state", "state": "reconnecting"})
+                    time.sleep(3)
+            else:
+                if not self._stop.is_set():
                     self.emit({"type": "voice_state", "state": "reconnecting"})
                     time.sleep(3)
             finally:
@@ -168,7 +173,7 @@ class LiveVoice:
             if len(chunk) < needed:
                 chunk += b"\x00" * (needed - len(chunk))
             outdata[:] = chunk
-            if not self._pending and self._output.empty() and self._speaking.is_set():
+            if not self._pending and self._output.empty() and self._speaking.is_set() and self._turn_complete:
                 self._speaking.clear()
                 if self._loop:
                     self._loop.call_soon_threadsafe(self.emit, {"type": "voice_state", "state": "listening"})
@@ -191,7 +196,10 @@ class LiveVoice:
         self._mic_queue.put_nowait(pcm)
 
     def _barge_in(self, captured: list[bytes]):
+        self._interrupted = True
         self._stop_audio()
+        self._echo.reset()
+        self._barge.reset()
         self.emit({"type": "voice_state", "state": "listening"})
         for block in captured:
             self._queue_mic(block)
@@ -230,6 +238,7 @@ class LiveVoice:
             if self._stop.is_set():
                 return
             if response.data and not self._interrupted:
+                self._turn_complete = False
                 self._speaking.set()
                 self.emit({"type": "voice_state", "state": "speaking"})
                 for offset in range(0, len(response.data), 2400):
@@ -247,12 +256,12 @@ class LiveVoice:
                 out = getattr(content, "output_transcription", None)
                 if inp and inp.text:
                     self.emit({"type": "transcript", "speaker": "user", "text": inp.text})
-                if out and out.text:
+                if out and out.text and not self._interrupted:
                     self.emit({"type": "transcript", "speaker": "yon", "text": out.text})
                 if content.turn_complete:
+                    self._turn_complete = True
                     if self._interrupted:
                         self._interrupted = False
                         self._echo.reset()
                         self._barge.reset()
-                    if not self._speaking.is_set():
-                        self.emit({"type": "turn_complete"})
+                    self.emit({"type": "turn_complete"})
