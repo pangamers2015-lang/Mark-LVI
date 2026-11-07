@@ -1953,6 +1953,7 @@ class JarvisLive:
 
             with _mic_stream:
                 print("[JARVIS] 🎤 Mic stream open")
+                self.ui.write_log("SYS: Microfone do computador conectado e fluxo de áudio aberto.")
                 while True:
                     await asyncio.sleep(0.1)
         except Exception as e:
@@ -2726,7 +2727,13 @@ class JarvisLive:
             cfg["log"] = self.ui.write_log
             return registry.build(pid, cfg)
 
-        engine = PipelineEngine(part("llm"), part("stt"), part("tts"),
+        stt_provider = part("stt")
+        if stt_provider is None:
+            self.ui.write_log(
+                "WARN: O modo Pipeline está sem provedor de reconhecimento de fala (STT). "
+                "Selecione Whisper para transcrever pelo microfone."
+            )
+        engine = PipelineEngine(part("llm"), stt_provider, part("tts"),
                                 config=config, log=self.ui.write_log)
         # Without push-to-talk nothing else knows when a sentence ended, so the
         # engine finds it in the audio. With push-to-talk the key release is the
