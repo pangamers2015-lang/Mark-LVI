@@ -759,7 +759,11 @@ class PipelineEngine:
         the engine should not be the thing guessing when someone stopped
         talking.
         """
-        if self._stt is None or not self._mic:
+        if self._stt is None:
+            self._log("WARN: Nenhum provedor STT está configurado. Se deseja usar Whisper, selecione-o no mecanismo Pipeline.")
+            return ""
+        if not self._mic:
+            self._log("WARN: O PTT foi solto, mas nenhum quadro de áudio chegou ao reconhecedor.")
             return ""
         pcm, self._mic, self._mic_bytes = b"".join(self._mic), [], 0
         from . import audio as _a
