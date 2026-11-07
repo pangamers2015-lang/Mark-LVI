@@ -141,9 +141,11 @@ TOOL = {
         "pre-approved so routine web research does not stop for permission prompts. Other "
         "operations are evaluated by Claude Code's automatic safety checks. Does not use "
         "unrestricted permission bypass. The default working directory is the Yon project root. "
-        "The action runs in the background; use background_tasks to check completion "
-        "and retrieve the final result. Do not claim completion until that task reports "
-        "completed, and inspect or test resulting changes before relying on them. Never "
+        "The action runs in the background; Yon automatically delivers its final result "
+        "at the next safe conversational pause. Use background_tasks only when the user "
+        "explicitly asks for task status or an earlier retrieval. Do not claim completion "
+        "until the task reports completed, and inspect or test resulting changes before "
+        "relying on them. Never 
         "request or expose API keys or authentication tokens."
     ),
     "brief": "Delegate a programming, investigation, or web research task to FCC Cloud.",
