@@ -2676,7 +2676,7 @@ class JarvisLive:
             instructions.append("Keep the greeting brief, calm, and conversational.")
         instructions.append("Keep it to 1 or 2 short sentences. Do not call tools.")
         if inbox_directives:
-            instructions.append("Execute these user-approved one-time startup instructions naturally in this startup greeting. Do not call tools or perform unrelated operations: " + " | ".join(item["instruction"] for item in inbox_directives))
+            instructions.append("Execute these user-approved one-time startup instructions naturally in this startup greeting. The one-time instruction overrides the normal greeting length limit as needed. Do not call tools or perform unrelated operations: " + " | ".join(item["instruction"] for item in inbox_directives))
         p1 = " ".join(instructions) + session_clause + lang_clause + name_clause
 
         if self._turn_done_event:
