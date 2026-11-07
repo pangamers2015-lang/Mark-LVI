@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ION</title>
+<title>YON</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
@@ -196,15 +196,15 @@
 </style>
 </head>
 <body data-estado="iniciando">
-<canvas id="esfera" aria-label="Esfera do Ion. Segure a barra de espaço para falar."></canvas>
+<canvas id="esfera" aria-label="Esfera do Yon. Segure a barra de espaço para falar."></canvas>
 <div id="yonDropOverlay" hidden><div class="yon-drop-label">Solte aqui — qualquer parte da tela aceita arquivos e pastas</div></div>
 
 <div class="topo">
-  <span class="marca">ION</span>
+  <span class="marca">YON</span>
   <span class="estado"><span class="ponto"></span><span id="estadoTexto">iniciando</span></span>
 </div>
 
-<button id="yonMenu" title="Recursos do Ion">⋯</button>
+<button id="yonMenu" title="Recursos do Yon">⋯</button>
 <button id="engrenagem" class="engrenagem" aria-label="Configurações" title="Configurações">
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
 </button>
@@ -215,11 +215,11 @@
       <span class="config-titulo">Configurações</span>
       <button id="fecharConfig" class="config-fechar" aria-label="Fechar">×</button>
     </div>
-    <div class="config-secao"><span>Voz do Ion</span></div>
+    <div class="config-secao"><span>Voz do Yon</span></div>
     <div id="listaVozes"></div>
     <div class="config-secao" style="display:none"><span>Velocidade da fala</span><span id="velValor"></span></div>
     <input id="velocidade" class="velocidade" type="range" min="0.8" max="1.2" step="0.05" aria-label="Velocidade da fala" style="display:none">
-    <div class="config-nota">O Ion utiliza o mecanismo de voz configurado no próprio backend. Você pode solicitar a reconstrução da sessão de voz ou reconfigurar os dispositivos sem trocar de interface.</div>
+    <div class="config-nota">O Yon utiliza o mecanismo de voz configurado no próprio backend. Você pode solicitar a reconstrução da sessão de voz ou reconfigurar os dispositivos sem trocar de interface.</div>
     <button id="yonReloadVoice" class="config-fechar" style="width:100%;height:auto;padding:12px;border:1px solid var(--linha);border-radius:8px;margin-top:12px">Recarregar sessão de voz</button>
     <button id="yonAudioDevices" class="config-fechar" style="width:100%;height:auto;padding:12px;border:1px solid var(--linha);border-radius:8px;margin-top:8px">Reconfigurar dispositivos de áudio</button>
     <div class="config-secao" style="margin-top:22px"><span>Encerramento</span></div>

@@ -82,7 +82,7 @@ def _read_full_config() -> dict:
 
 # Single source of truth for the release name — the window title, the header
 # badge and the readme must never disagree again.
-APP_VERSION  = "ION"
+APP_VERSION  = "MARK LVI"
 APP_PROTOCOL = APP_VERSION.split()[-1]
 
 _DEFAULT_W, _DEFAULT_H = 980, 700
@@ -1100,7 +1100,7 @@ class LogWidget(QTextEdit):
         self._text    = ""
         self._pos     = 0
         self._tag     = "sys"
-        self._ai_name_lc = "ion"   # updated when assistant name changes
+        self._ai_name_lc = "jarvis"   # updated when assistant name changes
         self._stream_active = False
         self._tmr = QTimer(self)
         self._tmr.timeout.connect(self._step)
@@ -1802,7 +1802,7 @@ class CustomizeOverlay(QWidget):
     saved = pyqtSignal(str, str, str, str)   # assistant_name, user_name, ui_color, voice
     _OW, _OH = 400, 588
 
-    def __init__(self, assistant_name="ION", user_name="",
+    def __init__(self, assistant_name="JARVIS", user_name="",
                  ui_color=DEFAULT_UI_COLOR, voice="", parent=None):
         super().__init__(parent)
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
@@ -2008,7 +2008,7 @@ class CustomizeOverlay(QWidget):
         self.hide()
 
     def _save(self):
-        name = self._name_input.text().strip() or "ION"
+        name = self._name_input.text().strip() or "JARVIS"
         user = self._user_input.text().strip()
         self.saved.emit(name, user, self._sel_color or DEFAULT_UI_COLOR, self._sel_voice)
         self.hide()
@@ -4629,9 +4629,7 @@ class MainWindow(QMainWindow):
 
         # Load customization from config
         _cfg = _read_full_config()
-        self._assistant_name: str = (_cfg.get("assistant_name") or "ION").strip()
-        if self._assistant_name.upper() in {"JARVIS", "J.A.R.V.I.S", "YON", "MARK LVI"}:
-            self._assistant_name = "ION"
+        self._assistant_name: str = (_cfg.get("assistant_name") or "JARVIS").strip()
         _display = self._assistant_name.upper()
 
         # Apply the saved UI colour BEFORE panels/stylesheets are built
@@ -7378,7 +7376,7 @@ class MainWindow(QMainWindow):
     def _apply_name_update(self, name: str, user_name: str, ui_color: str = "",
                            voice: str = ""):
         """Update all name/theme-dependent UI elements and persist to config."""
-        self._assistant_name = name.strip() or "ION"
+        self._assistant_name = name.strip() or "JARVIS"
         display = self._assistant_name.upper()
         self.setWindowTitle(f"{display} — {APP_VERSION}")
         self._title_lbl.setText(display)

@@ -349,7 +349,7 @@ def _load_system_prompt() -> str:
         return PROMPT_PATH.read_text(encoding="utf-8")
     except Exception:
         return (
-            "You are Ion, the user's central AI assistant. "
+            "You are JARVIS, Tony Stark's AI assistant. "
             "Be concise, direct, and always use the provided tools to complete tasks. "
             "Never simulate or guess results — always call the appropriate tool."
         )
@@ -1588,12 +1588,10 @@ class JarvisLive:
         # Load customization from config
         try:
             _cfg = json.loads(open(API_CONFIG_PATH, encoding="utf-8").read())
-            self._asst_name = (_cfg.get("assistant_name") or "ION").strip()
-            if self._asst_name.upper() in {"JARVIS", "J.A.R.V.I.S", "YON", "MARK LVI"}:
-                self._asst_name = "ION"
+            self._asst_name = (_cfg.get("assistant_name") or "JARVIS").strip()
             _user_name = (_cfg.get("user_name") or "").strip()
         except Exception:
-            self._asst_name = "ION"
+            self._asst_name = "JARVIS"
             _user_name = ""
 
         memory     = load_memory()
@@ -1871,11 +1869,11 @@ class JarvisLive:
                 self._background_task_seq += 1
                 task_id = f"BG-{self._background_task_seq:04d}"
                 _task_location = str(args.get("working_directory") or args.get("folder") or "").strip()
-                _task_project = Path(_task_location).name if _task_location else "Projeto Ion"
+                _task_project = Path(_task_location).name if _task_location else "Projeto Yon"
                 _task_title = (
                     "Cloud está codando" if name == "fcc_cloud"
-                    else "Ion está investigando uma solução" if name == "capability_recovery"
-                    else "Ion está trabalhando"
+                    else "Yon está investigando uma solução" if name == "capability_recovery"
+                    else "Yon está trabalhando"
                 )
                 self._background_task_records[task_id] = {
                     "id": task_id,

@@ -588,7 +588,7 @@ def code_helper(
 # ── Tool declaration (auto-discovered by core/action_loader.py) ──────────────
 TOOL = {
     "name": "code_helper",
-    "description": "LEGACY single-file utility. For project implementation, multi-file changes, debugging or feature work, use ion_develop_project so the Ion supervisor coordinates NVIDIA/Gemini and runs acceptance tests.",
+    "description": "Writes, edits, explains, runs, or builds code files.",
     "parameters": {
         "type": "OBJECT",
         "properties": {

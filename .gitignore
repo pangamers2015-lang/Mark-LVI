@@ -52,6 +52,3 @@ screenshots/
 
 # Yon autonomous capability-development sandboxes (local runtime data)
 .yon_capability_lab/
-
-# Share only the placeholder template; real credentials stay ignored.
-!.env.example
