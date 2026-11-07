@@ -174,12 +174,19 @@
   #yonVideo[hidden],#yonCamera[hidden] { display:none; }
   #yonVideo video,#yonCamera img { max-width:100%; max-height:100%; }
   .yon-close { position:absolute; right:12px; top:10px; z-index:2; background:rgba(255,255,255,.1); color:white; border:0; border-radius:8px; padding:8px 12px; cursor:pointer; }
-  #yonTasks { position:fixed; left:24px; bottom:64px; z-index:18; display:flex; flex-direction:column; gap:8px; width:min(330px,calc(100vw - 48px)); pointer-events:none; }
-  .yon-task-card { pointer-events:auto; padding:12px 14px; border:1px solid rgba(255,255,255,.16); border-radius:11px; background:rgba(10,10,12,.78); backdrop-filter:blur(16px); box-shadow:0 8px 30px rgba(0,0,0,.28); animation:entra .25s ease both; }
-  .yon-task-name { font-size:12px; color:#fff; margin-bottom:5px; }
-  .yon-task-status { font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:rgba(255,255,255,.48); }
-  .yon-task-track { height:2px; background:rgba(255,255,255,.12); margin-top:9px; overflow:hidden; border-radius:3px; }
-  .yon-task-track span { display:block; height:100%; background:#fff; width:var(--progress,35%); transition:width .3s; }
+  #yonTasks { position:fixed; left:24px; top:82px; bottom:64px; z-index:18; display:flex; flex-direction:column; gap:9px; width:min(292px,calc(100vw - 40px)); max-height:calc(100vh - 150px); overflow-y:auto; padding:2px 4px 8px 0; pointer-events:none; scrollbar-width:thin; scrollbar-color:rgba(255,255,255,.16) transparent; }
+  .yon-task-panel-title { padding:4px 8px 3px; color:rgba(255,255,255,.42); font-size:9px; letter-spacing:.2em; text-transform:uppercase; }
+  .yon-task-card { pointer-events:auto; padding:12px 13px; border:1px solid rgba(255,255,255,.13); border-radius:11px; background:rgba(10,10,12,.72); backdrop-filter:blur(16px); box-shadow:0 8px 30px rgba(0,0,0,.24); animation:entra .25s ease both; }
+  .yon-task-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px; }
+  .yon-task-name { min-width:0; font-size:12px; line-height:1.4; color:#fff; font-weight:500; }
+  .yon-task-project { flex:0 0 auto; max-width:110px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:rgba(255,255,255,.48); font-size:9px; letter-spacing:.08em; text-transform:uppercase; }
+  .yon-task-context { color:rgba(255,255,255,.58); font-size:11px; line-height:1.45; overflow-wrap:anywhere; }
+  .yon-task-status { margin-top:8px; font-size:9px; letter-spacing:.12em; text-transform:uppercase; color:rgba(255,255,255,.42); }
+  .yon-task-track { height:2px; background:rgba(255,255,255,.09); margin-top:8px; overflow:hidden; border-radius:3px; }
+  .yon-task-track span { display:block; height:100%; width:34%; background:rgba(255,255,255,.72); animation:yon-task-progress 1.8s ease-in-out infinite; }
+  @keyframes yon-task-progress { 0% { transform:translateX(-110%); } 100% { transform:translateX(330%); } }
+  .resposta a { color:#b9dcff; text-decoration:underline; pointer-events:auto; }
+  .resposta .resposta-imagem { display:inline-block; max-width:180px; max-height:110px; object-fit:contain; margin:5px; border:1px solid rgba(255,255,255,.16); border-radius:8px; }
   #yonMenu { position:fixed; left:24px; top:24px; z-index:25; color:rgba(255,255,255,.55); background:transparent; border:1px solid rgba(255,255,255,.14); border-radius:50%; width:36px; height:36px; cursor:pointer; font-size:20px; }
   #yonMenuPanel { position:fixed; left:24px; top:68px; z-index:30; width:250px; padding:10px; background:rgba(12,12,14,.92); border:1px solid rgba(255,255,255,.18); border-radius:12px; backdrop-filter:blur(18px); }
   #yonMenuPanel[hidden] { display:none; }
@@ -236,7 +243,7 @@
   <button class="yon-menu-button" data-action="audio">Reconfigurar áudio</button>
   <button class="yon-menu-button" data-action="remote">Acesso remoto</button>
 </div>
-<div id="yonTasks"></div>
+<div id="yonTasks" aria-live="polite"><div class="yon-task-panel-title">Em segundo plano</div></div>
 <div id="yonVideo" hidden><button id="yonVideoClose" class="yon-close">Fechar</button><video id="yonVideoPlayer" controls autoplay></video></div>
 <div id="yonCamera" hidden><button id="yonCameraClose" class="yon-close">Fechar</button><img id="yonCameraImage" alt="Câmera"></div>
 <div id="caixa"><input id="entrada" type="text" placeholder="Digite e aperte Enter" autocomplete="off"></div>
@@ -789,8 +796,32 @@
       } else if (e.tipo === "resposta") {
         turnoAberto = false;
         document.querySelectorAll(".chip").forEach((c) => c.classList.add("feito"));
-        el("resposta").textContent = e.texto;
-        el("tempo").textContent = "respondeu em " + String(e.segundos).replace(".", ",") + " s";
+        // Respostas faladas não viram legendas na interface. Exibimos apenas
+        // links e imagens realmente úteis/clicáveis, mantendo o visual limpo.
+        const areaResposta = el("resposta");
+        areaResposta.replaceChildren();
+        const textoResposta = String(e.texto || "");
+        const urlPattern = /https?:\/\/[^\s<>"']+/gi;
+        let urlMatch;
+        while ((urlMatch = urlPattern.exec(textoResposta)) !== null) {
+          let url = urlMatch[0].replace(/[),.!?]+$/, "");
+          try {
+            const link = document.createElement("a");
+            link.href = url; link.target = "_blank"; link.rel = "noopener noreferrer";
+            const imagem = /\.(png|jpe?g|gif|webp|avif)(\?.*)?$/i.test(url);
+            if (imagem) {
+              const img = document.createElement("img");
+              img.src = url; img.alt = "Imagem compartilhada pelo Yon";
+              img.className = "resposta-imagem"; link.appendChild(img);
+            } else {
+              link.textContent = url;
+            }
+            areaResposta.appendChild(link);
+            areaResposta.appendChild(document.createTextNode(" "));
+          } catch (_) {}
+        }
+        if (areaResposta.childNodes.length) corpo.classList.add("detalhes");
+        el("tempo").textContent = "";
         falar(e.audio);
       } else if (e.tipo === "aviso") {
         avisar(e.texto);
@@ -952,15 +983,24 @@
   async function atualizarTarefas(){
     try{
       const r=await fetch("/api/action",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"tasks"})});
-      const d=await r.json();const root=el("yonTasks");const tasks=(d.items||[]).filter(x=>!["completed","failed","cancelled"].includes(String(x.status||"").toLowerCase())).slice(0,5);
-      root.innerHTML="";
+      const d=await r.json();
+      const root=el("yonTasks");
+      const tasks=(d.items||[]).filter(x=>!["completed","failed","cancelled","interrupted"].includes(String(x.status||"").toLowerCase())).slice(0,6);
+      root.replaceChildren();
+      if(!tasks.length) return;
+      const heading=document.createElement("div");heading.className="yon-task-panel-title";heading.textContent="Em segundo plano";root.appendChild(heading);
       tasks.forEach(t=>{
-        const card=document.createElement("div");card.className="yon-task-card";
-        const name=document.createElement("div");name.className="yon-task-name";name.textContent=t.title||t.name||t.task||"Tarefa em segundo plano";
-        const status=document.createElement("div");status.className="yon-task-status";status.textContent=t.status||"Em andamento";
-        const track=document.createElement("div");track.className="yon-task-track";const bar=document.createElement("span");
-        const pct=Number(t.progress??t.percent??35);bar.style.setProperty("--progress",Math.max(3,Math.min(100,pct))+"%");track.appendChild(bar);
-        card.append(name,status,track);root.appendChild(card);
+        const card=document.createElement("article");card.className="yon-task-card";
+        const head=document.createElement("div");head.className="yon-task-heading";
+        const name=document.createElement("div");name.className="yon-task-name";
+        const taskType=String(t.name||"").toLowerCase();
+        name.textContent=t.display_title || (taskType==="fcc_cloud" ? "Cloud está codando" : taskType==="capability_recovery" ? "Yon está investigando uma solução" : "Yon está trabalhando");
+        const project=document.createElement("div");project.className="yon-task-project";project.textContent=t.project||"Projeto Yon";
+        head.append(name,project);
+        const context=document.createElement("div");context.className="yon-task-context";context.textContent=t.summary||t.task||"Atividade em andamento";
+        const status=document.createElement("div");status.className="yon-task-status";status.textContent=t.stage|| (taskType==="fcc_cloud" ? "Execução pelo Cloud" : "Em andamento");
+        const track=document.createElement("div");track.className="yon-task-track";track.appendChild(document.createElement("span"));
+        card.append(head,context,status,track);root.appendChild(card);
       });
     }catch(_){}
   }
