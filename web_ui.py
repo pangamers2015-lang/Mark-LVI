@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Desktop HTML interface for Yon.
+"""Browser-based HTML interface for Yon.
 
 The visual layer is HTML/CSS/JavaScript in web/index.html. Python remains the
 application backend and exposes a small localhost event/API bridge.
@@ -81,7 +81,7 @@ class _RootShim:
         self.owner = owner
 
     def mainloop(self):
-        self.owner._run_window()
+        self.owner.open_browser()
 
     def after(self, milliseconds, callback):
         timer = threading.Timer(max(0, milliseconds) / 1000.0, callback)
@@ -281,7 +281,7 @@ class _Handler(BaseHTTPRequestHandler):
 
 
 class JarvisUI:
-    """Compatibility surface for the existing Yon backend; UI is now HTML."""
+    """Compatibility surface for the existing Yon backend; UI runs in a browser."""
     def __init__(self, face_path=None, size=None):
         self._ready = self._check_config()
         self._win = _WindowShim(self._ready)
