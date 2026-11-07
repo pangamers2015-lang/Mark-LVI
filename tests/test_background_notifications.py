@@ -1,10 +1,33 @@
 """Tests for safe, provider-agnostic background task announcements."""
 import unittest
 
-from core.background_notifications import build_task_notification
+from core.background_notifications import build_task_notification, can_deliver_notification
 
 
 class BackgroundNotificationTests(unittest.TestCase):
+    def test_delivery_waits_until_speech_and_audio_are_idle(self):
+        base = {
+            "turn_complete_at": 10.0,
+            "now": 12.0,
+            "speaking": False,
+            "audio_pending": False,
+            "tail_active": False,
+            "user_quiet_for": 2.0,
+        }
+        self.assertTrue(can_deliver_notification(**base))
+        self.assertFalse(can_deliver_notification(**{**base, "speaking": True}))
+        self.assertFalse(can_deliver_notification(**{**base, "audio_pending": True}))
+        self.assertFalse(can_deliver_notification(**{**base, "tail_active": True}))
+        self.assertFalse(can_deliver_notification(**{**base, "now": 11.0}))
+        self.assertFalse(can_deliver_notification(**{**base, "user_quiet_for": 0.2}))
+
+    def test_wake_word_sleep_blocks_announcement(self):
+        self.assertFalse(can_deliver_notification(
+            turn_complete_at=10.0, now=12.0, speaking=False,
+            audio_pending=False, tail_active=False, user_quiet_for=2.0,
+            wake_enabled=True, awake=False,
+        ))
+
     def test_completed_fcc_result_hides_provider_metadata(self):
         prompt = build_task_notification({
             "id": "BG-0001",
