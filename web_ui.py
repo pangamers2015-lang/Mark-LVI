@@ -9,16 +9,31 @@ from __future__ import annotations
 import json
 import mimetypes
 import os
+import tempfile
+import uuid
+from email.parser import BytesParser
+from email import policy
+from pathlib import Path, PurePosixPath
 import threading
 import time
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 BASE_DIR = Path(__file__).resolve().parent
 WEB_DIR = BASE_DIR / "web"
 API_FILE = BASE_DIR / "config" / "api_keys.json"
+
+
+def _safe_drop_relative_path(value):
+    """Return a safe relative path from a browser drag/drop filename."""
+    raw = str(value or "").replace("\\", "/")
+    if not raw or raw.startswith("/") or "\x00" in raw:
+        return None
+    parts = [part for part in raw.split("/") if part not in ("", ".")]
+    if not parts or any(part == ".." or ":" in part for part in parts):
+        return None
+    return Path(*parts)
 
 
 class _EventHub:
@@ -176,6 +191,8 @@ class _Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlparse(self.path).path
+        if path == "/api/drop":
+            return self._receive_drop()
         data = self._json()
         if path == "/api/fechar":
             self.ui.schedule_browser_shutdown()
@@ -280,6 +297,52 @@ class _Handler(BaseHTTPRequestHandler):
                 return self._send(200, json.dumps({"items": self.ui.get_plugin_settings() if self.ui.get_plugin_settings else []}, ensure_ascii=False, default=str))
             return self._send(400, '{"error":"Ação desconhecida."}')
         return self._send(404, "{}")
+
+    def _receive_drop(self):
+        """Receive user-dropped files without exposing a general filesystem API."""
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            if length <= 0 or length > 110 * 1024 * 1024:
+                return self._send(413, json.dumps({"ok": False, "error": "O envio deve ter até 100 MB."}))
+            content_type = self.headers.get("Content-Type", "")
+            if "multipart/form-data" not in content_type.lower():
+                return self._send(400, '{"ok":false,"error":"Envio de arquivos inválido."}')
+            raw = self.rfile.read(length)
+            headers = (
+                f"Content-Type: {content_type}\r\nMIME-Version: 1.0\r\n\r\n"
+            ).encode("latin-1", errors="replace")
+            message = BytesParser(policy=policy.default).parsebytes(headers + raw)
+            if not message.is_multipart():
+                return self._send(400, '{"ok":false,"error":"Pacote de arquivos inválido."}')
+
+            manifest = {}
+            files = []
+            total = 0
+            for part in message.iter_parts():
+                field = part.get_param("name", header="content-disposition")
+                payload = part.get_payload(decode=True) or b""
+                if field == "manifest":
+                    manifest = json.loads(payload.decode("utf-8"))
+                elif field == "files":
+                    relative = _safe_drop_relative_path(part.get_filename() or "")
+                    if relative is None:
+                        return self._send(400, '{"ok":false,"error":"Nome de arquivo inválido."}')
+                    total += len(payload)
+                    if total > 100 * 1024 * 1024 or len(files) >= 300:
+                        return self._send(413, '{"ok":false,"error":"Limite de 100 MB ou 300 arquivos excedido."}')
+                    files.append((relative, payload))
+
+            if not isinstance(manifest, dict) or not files and not manifest.get("directories"):
+                return self._send(400, '{"ok":false,"error":"Nenhum arquivo ou pasta foi recebido."}')
+            result = self.ui.receive_drop(manifest, files)
+            if not result.get("ok"):
+                return self._send(503, json.dumps(result, ensure_ascii=False))
+            return self._send(202, json.dumps(result, ensure_ascii=False))
+        except (ValueError, TypeError, json.JSONDecodeError) as exc:
+            return self._send(400, json.dumps({"ok": False, "error": "Não consegui interpretar os itens enviados: " + str(exc)[:160]}, ensure_ascii=False))
+        except Exception as exc:
+            self.ui.write_log("ERR: Recebimento de arquivo: " + str(exc)[:180])
+            return self._send(500, json.dumps({"ok": False, "error": "Falha ao receber os itens."}))
 
     def _events(self):
         self.send_response(200)
@@ -513,6 +576,72 @@ class JarvisUI:
             time.sleep(0.2)
         return not self._closing
 
+    def receive_drop(self, manifest, files):
+        """Stage dropped items locally and ask Yon what the user wants done."""
+        if not self.on_text_command:
+            return {"ok": False, "error": "O chat ainda não está conectado."}
+        root = BASE_DIR / "data" / "inbox" / ("drop_" + uuid.uuid4().hex[:12])
+        root.mkdir(parents=True, exist_ok=False)
+        saved = []
+        try:
+            for relative, payload in files:
+                target = root / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(payload)
+                saved.append({"path": str(target), "relative": relative.as_posix(), "size": len(payload)})
+            directories = []
+            for item in manifest.get("directories", [])[:300]:
+                relative = _safe_drop_relative_path(item)
+                if relative is None:
+                    continue
+                (root / relative).mkdir(parents=True, exist_ok=True)
+                directories.append(relative.as_posix())
+            try:
+                (root / "manifest.json").write_text(
+                    json.dumps({"files": saved, "directories": directories},
+                               ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+            except OSError:
+                pass
+
+            labels = []
+            for item in manifest.get("items", [])[:100]:
+                if not isinstance(item, dict):
+                    continue
+                name = str(item.get("name") or "item")[:180]
+                kind = str(item.get("kind") or "item")[:30]
+                labels.append(f"- {kind}: {name}")
+            if not labels:
+                labels = [f"- arquivo: {entry['relative']}" for entry in saved[:100]]
+                labels += [f"- pasta: {entry}" for entry in directories[:100]]
+            file_paths = [entry["path"] for entry in saved[:100]]
+            prompt = (
+                "O usuário acabou de arrastar e soltar itens diretamente na tela do Yon. "
+                "Trate isso como itens que ele está mostrando a você. Identifique claramente "
+                "o que recebeu e pergunte o que ele deseja fazer. NÃO edite, mova, apague, "
+                "execute, extraia ou processe os itens sem uma instrução explícita. "
+                "Se for uma pasta, diga que identificou a pasta e pergunte o que fazer com ela.\n\n"
+                "Itens recebidos:\n" + "\n".join(labels[:100]) +
+                "\n\nPasta de recebimento local: " + str(root) +
+                ("\nCaminhos dos arquivos recebidos:\n" + "\n".join(file_paths) if file_paths else "") +
+                "\n\nOs arquivos foram copiados para a pasta de recebimento; os originais não foram alterados."
+            )
+            summary = [{"name": str(x.get("name") or "item")[:180],
+                        "kind": str(x.get("kind") or "item")[:30]}
+                       for x in manifest.get("items", [])[:100] if isinstance(x, dict)]
+            if not summary:
+                summary = [{"name": p.as_posix(), "kind": "arquivo"} for p, _ in files[:100]]
+                summary += [{"name": d, "kind": "pasta"} for d in directories[:100]]
+            _EVENTS.emit({"tipo": "itens_recebidos", "itens": summary, "quantidade": len(summary)})
+            threading.Thread(target=self.on_text_command, args=(prompt,),
+                             daemon=True, name="Yon-Dropped-Items").start()
+            self.write_log(f"SYS: {len(saved)} arquivo(s) recebido(s) por arrastar e soltar.")
+            return {"ok": True, "count": len(summary), "stored": len(saved)}
+        except Exception:
+            # Keep any files already received; never delete user-provided data on failure.
+            raise
+
     def set_state(self, state):
         _EVENTS.emit({"tipo": "estado", "estado": _state_name(state)})
 
@@ -523,16 +652,19 @@ class JarvisUI:
         if msg.startswith(("ERR:", "WARN:")):
             _EVENTS.emit({"tipo": "aviso", "texto": msg})
 
-    def show_content(self, title, text):
-        _EVENTS.emit({"tipo": "conteudo", "titulo": str(title or "")[:100], "texto": str(text or "")[:12000]})
+    def show_content(self, title, text, card=None):
+        event = {"tipo": "conteudo", "titulo": str(title or "")[:100], "texto": str(text or "")[:12000]}
+        if isinstance(card, dict):
+            event["card"] = card
+        _EVENTS.emit(event)
 
     def show_speech_caption(self, text):
-        chunk = str(text or "").strip()
-        if chunk:
-            _EVENTS.emit({"tipo": "legenda", "texto": chunk[:2000]})
+        # Voice remains audible; repeated spoken captions are intentionally not
+        # mirrored into the visual conversation. Structured content uses popups.
+        return None
 
     def finish_speech_caption(self):
-        _EVENTS.emit({"tipo": "legenda_fim"})
+        return None
 
     def show_code_job(self, job):
         _EVENTS.emit({"tipo": "codigo", "job": dict(job or {})})
