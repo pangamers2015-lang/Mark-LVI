@@ -70,7 +70,7 @@ def yon_brain(parameters: dict, player=None) -> str:
             return (f"Yon cognitive system initialized={brain.initialize()}; active_goals={len(goals)}; "
                 f"graph_nodes={graph.get('nodes',0)}; graph_edges={graph.get('edges',0)}. "
                 "Semantic retrieval requires its optional model dependency.")
-        return "Unknown action. Use status, remember, search, validate, goal_add, goal_list, checkpoint, relate or reflect."
+        return "Unknown action. Use status, remember, search, validate, goal_add, goal_update, goal_list, checkpoint, depend, index, consolidate, relate or reflect."
     except Exception as exc:
         return f"Yon cognitive tool failed safely: {type(exc).__name__}: {exc}"
 
@@ -88,7 +88,7 @@ TOOL={
 "content":{"type":"STRING"},"level":{"type":"STRING","enum":["working","episodic","semantic","consolidated"]},
 "source":{"type":"STRING"},"state":{"type":"STRING","enum":["confirmed","hypothesis","stale","contested","planned","active","blocked","completed","cancelled","in_progress"]},"evidence":{"type":"STRING"},
 "query":{"type":"STRING"},"memory_id":{"type":"INTEGER"},"title":{"type":"STRING"},
-"description":{"type":"STRING"},"priority":{"type":"INTEGER"},"goal_id":{"type":"INTEGER"},"depends_on_goal_id":{"type":"INTEGER"},"title":{"type":"STRING"},
+"description":{"type":"STRING"},"priority":{"type":"INTEGER"},"goal_id":{"type":"INTEGER"},"depends_on_goal_id":{"type":"INTEGER"},
 "summary":{"type":"STRING"},"source_id":{"type":"INTEGER"},"target_id":{"type":"INTEGER"},
 "relation":{"type":"STRING"},"next_step":{"type":"STRING"},"request":{"type":"STRING"}},
 "required":["action"]},"handler":yon_brain}
