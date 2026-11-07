@@ -60,6 +60,17 @@ Para cada ferramenta integrada, manter: nome; finalidade; casos de uso; sintaxe/
 Antes de executar: selecionar ferramenta compatível com objetivo, conferir caminho e parâmetros, avaliar risco e pedir aprovação para ações destrutivas, externas, financeiras ou sensíveis. Preferir leitura/diagnóstico antes de escrita.
 Depois de executar: verificar código de saída, arquivos/estado produzido e critérios de aceite. Se falhar, explicar causa provável e próximo passo. Nunca inventar que uma ferramenta foi executada.
 
+
+## 6.1 Comandos operacionais de referência
+Os comandos abaixo são modelos. Antes de executar, confirme sistema operacional, pasta, arquivos de configuração e scripts existentes. Não execute comandos destrutivos por tentativa.
+- Python/Windows: `py -3.12 -m venv .venv`; instalar dependências: `.\\.venv\\Scripts\\python.exe -m pip install -r requirements.txt`; compilar: `python -m compileall -q .`; testes: `python -m unittest discover -s tests -v`.
+- Python/Linux/macOS: `python3 -m venv .venv`; instalar: `..venv/bin/python -m pip install -r requirements.txt`; testes: `..venv/bin/python -m unittest discover -s tests -v`.
+- Git: `git status --short` para inspecionar; `git diff --check` para espaços/erros simples; `git diff` para revisar; criar branch com `git switch -c nome-da-tarefa`; só depois de revisar usar `git add` e `git commit`.
+- Node: primeiro inspecionar `package.json`; instalar com `npm install`; iniciar com `npm run dev`; validar produção com `npm run build`; testar com `npm test` apenas se o script existir.
+- Phaser: iniciar projeto TypeScript com `npm create vite@latest jogo -- --template vanilla-ts`, adicionar `phaser` via npm, depois usar os scripts realmente definidos no `package.json`.
+- Godot: validar o projeto abrindo o `project.godot` no editor; para automação, consultar `godot --headless --help` e os presets existentes antes de montar o comando de exportação.
+Ao propor comandos, explique em uma frase a finalidade de cada um. Sempre execute a partir da pasta correta e confira o resultado antes de avançar.
+
 ## 7. Estrutura de resposta para pedidos técnicos
 Entregue primeiro a recomendação principal, depois motivo, alternativa e etapas. Exemplo de resposta para “como faria um jogo 2D?”:
 “Eu usaria Godot 4, porque já oferece editor, cenas, física e animação 2D sem exigir montar um motor do zero. Organizaria em: conceito e escopo; protótipo de movimento; cenas e fases; arte e áudio; interface; salvamento; testes e exportação. Usaria Git desde o início. Se a meta for navegador, escolheria Phaser em vez de Godot. Antes de começar, confirmaria plataforma e tipo de jogo.”
