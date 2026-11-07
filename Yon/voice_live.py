@@ -12,6 +12,7 @@ from google import genai
 from google.genai import types
 from echo_guard import EchoGuard
 from barge_in import BargeInDetector
+from knowledge_base import load_system_context
 
 LIVE_MODEL = "gemini-3.8-live"
 INPUT_RATE = 16_000
@@ -66,9 +67,15 @@ class LiveVoice:
 
     def stop(self):
         self._stop.set()
+        self._ptt_held.clear()
+        self._auto_capture.clear()
         if self._loop and self._loop.is_running() and self._stop_event is not None:
             self._loop.call_soon_threadsafe(self._stop_event.set)
         self._stop_audio()
+        self._close_audio()
+        thread = self._thread
+        if thread and thread.is_alive() and thread is not threading.current_thread():
+            thread.join(timeout=4.0)
 
     def hold_to_talk(self, held: bool):
         held = bool(held)
@@ -153,10 +160,10 @@ class LiveVoice:
             "response_modalities": ["AUDIO"],
             "input_audio_transcription": {},
             "output_audio_transcription": {},
-            "system_instruction": (
-                "Você é Yon, um agente pessoal. Converse em português brasileiro por padrão. "
-                "Seja natural, atento e conciso. Ouça o usuário enquanto ele fala e responda "
-                "como em uma conversa real."
+            "system_instruction": load_system_context() + (
+                "\\n\\nNa conversa por voz, use frases naturais e curtas. "
+                "Não responda antes de o usuário concluir a ideia. Se a fala estiver ambígua, "
+                "peça para repetir apenas o trecho necessário. Não invente ferramentas disponíveis."
             ),
             "speech_config": {"voice_config": {"prebuilt_voice_config": {"voice_name": "Orus"}}},
         }
