@@ -501,6 +501,14 @@ class JarvisUI:
     def show_content(self, title, text):
         _EVENTS.emit({"tipo": "conteudo", "titulo": str(title or "")[:100], "texto": str(text or "")[:12000]})
 
+    def show_speech_caption(self, text):
+        chunk = str(text or "").strip()
+        if chunk:
+            _EVENTS.emit({"tipo": "legenda", "texto": chunk[:2000]})
+
+    def finish_speech_caption(self):
+        _EVENTS.emit({"tipo": "legenda_fim"})
+
     def show_code_job(self, job):
         _EVENTS.emit({"tipo": "codigo", "job": dict(job or {})})
 
