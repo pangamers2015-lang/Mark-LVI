@@ -102,9 +102,9 @@ TOOL={
 "evidence justifies confirmed. Use checkpoint after meaningful progress and goal_add for multi-step "
 "work. Use goal_update for objective lifecycle, depend for cycle-safe prerequisites, index for "
 "optional semantic indexing, and consolidate only confirmed memories with evidence. Search before "
-"repeating known procedures. Use reflect to assess complex requests. Use consult_local to obtain an independent local-model
-opinion through Ollama when it is configured, then critically review its response. Use status
-to inspect the brain."),
+"repeating known procedures. Use reflect to assess complex requests. Use consult_local to obtain an "
+"independent local-model opinion through Ollama when configured, then critically review its response. "
+"Use obsidian_export to generate Markdown views in a configured Obsidian vault; SQLite remains authoritative."),
 "tier":"core","brief":"Stores and retrieves memories, validates evidence, and tracks objectives/checkpoints.",
 "parameters":{"type":"OBJECT","properties":{
 "action":{"type":"STRING","enum":["status","remember","search","validate","goal_add","goal_update","goal_list","checkpoint","depend","index","consolidate","relate","reflect","consult_local","obsidian_export"]},
