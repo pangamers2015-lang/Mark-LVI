@@ -384,6 +384,40 @@ TOOL_DECLARATIONS = [
     # tools live in their own action file and are auto-discovered by
     # core.action_loader (see JarvisLive.__init__).
     {
+        "name": "show_card",
+        "description": (
+            "Shows a visual information card in the Yon interface. Use this for "
+            "important results that benefit from a popup, especially football match "
+            "scores, news, and concise visual summaries. For a match, provide home_team, "
+            "away_team, score, and verified home_logo/away_logo image URLs when available. "
+            "Never invent scores, teams, logos, or image URLs. Put source URLs in text; "
+            "they become clickable. Use after researching and verifying the information."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "title": {"type": "STRING", "description": "Short card title"},
+                "text": {"type": "STRING", "description": "Concise explanation and source URLs"},
+                "card": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "home_team": {"type": "STRING"},
+                        "away_team": {"type": "STRING"},
+                        "score": {"type": "STRING"},
+                        "home_logo": {"type": "STRING", "description": "Verified HTTPS/HTTP logo URL"},
+                        "away_logo": {"type": "STRING", "description": "Verified HTTPS/HTTP logo URL"},
+                        "competition": {"type": "STRING"},
+                        "date": {"type": "STRING"},
+                        "status": {"type": "STRING"},
+                        "image": {"type": "STRING", "description": "Optional verified image URL"},
+                        "image_alt": {"type": "STRING"}
+                    }
+                }
+            },
+            "required": ["title", "text"]
+        }
+    },
+    {
         "name": "system_status",
         "description": (
             "Returns real-time system metrics: CPU usage, RAM, GPU load, CPU temperature, "
@@ -1689,6 +1723,18 @@ class JarvisLive:
         _t_tool = time.monotonic()
         self.ui.set_state("THINKING")
 
+
+        if name == "show_card":
+            title = str(args.get("title") or "Informação")[:120]
+            text = str(args.get("text") or "")[:12000]
+            card = args.get("card") if isinstance(args.get("card"), dict) else None
+            self.ui.show_content(title, text, card=card)
+            if not self.ui.muted:
+                self.ui.set_state("LISTENING")
+            return types.FunctionResponse(
+                id=fc.id, name=name,
+                response={"result": "Card exibido na interface.", "silent": True}
+            )
 
         if name == "set_behavior_preferences":
             requested = {
