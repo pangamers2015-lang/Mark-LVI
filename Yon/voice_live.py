@@ -12,8 +12,9 @@ from google import genai
 from google.genai import types
 from echo_guard import EchoGuard
 from barge_in import BargeInDetector
+from knowledge_base import load_system_context
 
-LIVE_MODEL = "models/gemini-3.1-flash-live-preview"
+LIVE_MODEL = "gemini-3.8-live"
 INPUT_RATE = 16_000
 OUTPUT_RATE = 24_000
 BLOCK = 1024
@@ -42,6 +43,9 @@ class LiveVoice:
         self._barge = BargeInDetector()
         self._interrupted = False
         self._ptt_held = threading.Event()
+        self._auto_capture = threading.Event()
+        self._barge_pending = threading.Event()
+        self._auto_silence_blocks = 0
         self._mic_stream = None
         self._speaker_stream = None
         self._mic_callback = None
@@ -63,9 +67,14 @@ class LiveVoice:
 
     def stop(self):
         self._stop.set()
+        self._ptt_held.clear()
+        self._auto_capture.clear()
         if self._loop and self._loop.is_running() and self._stop_event is not None:
             self._loop.call_soon_threadsafe(self._stop_event.set)
         self._stop_audio()
+        thread = self._thread
+        if thread and thread.is_alive() and thread is not threading.current_thread():
+            thread.join(timeout=5.0)
 
     def hold_to_talk(self, held: bool):
         held = bool(held)
@@ -150,10 +159,10 @@ class LiveVoice:
             "response_modalities": ["AUDIO"],
             "input_audio_transcription": {},
             "output_audio_transcription": {},
-            "system_instruction": (
-                "Você é Yon, um agente pessoal. Converse em português brasileiro por padrão. "
-                "Seja natural, atento e conciso. Ouça o usuário enquanto ele fala e responda "
-                "como em uma conversa real."
+            "system_instruction": load_system_context() + (
+                "\n\nNa conversa por voz, use frases naturais e curtas. "
+                "Não responda antes de o usuário concluir a ideia. Se a fala estiver ambígua, "
+                "peça para repetir apenas o trecho necessário. Não invente ferramentas disponíveis."
             ),
             "speech_config": {"voice_config": {"prebuilt_voice_config": {"voice_name": "Orus"}}},
         }
@@ -185,13 +194,41 @@ class LiveVoice:
 
     def _open_audio(self):
         def mic_callback(indata, frames, timing, status):
-            # The audio device stays ready, but no samples reach Gemini unless
-            # the user is physically holding the push-to-talk key.
-            if not self._ptt_held.is_set():
-                return
             pcm = bytes(indata)
-            if self._loop and self._mic_queue is not None:
+            if not self._loop or self._mic_queue is None:
+                return
+            # Explicit push-to-talk always wins and streams only while held.
+            if self._ptt_held.is_set():
                 self._loop.call_soon_threadsafe(self._queue_mic, pcm)
+                return
+            # After a voice interruption, keep forwarding the user's utterance
+            # until a short silence marks its end.
+            if self._auto_capture.is_set():
+                samples = np.frombuffer(pcm, dtype="<i2").astype(np.float32)
+                level = float(np.sqrt(np.mean(samples * samples))) / 32768.0 if samples.size else 0.0
+                self._loop.call_soon_threadsafe(self._queue_mic, pcm)
+                if level < 0.012:
+                    self._auto_silence_blocks += 1
+                    if self._auto_silence_blocks >= 12:
+                        self._loop.call_soon_threadsafe(self._end_auto_capture)
+                else:
+                    self._auto_silence_blocks = 0
+                return
+            # While Yon speaks, analyse microphone audio locally. Nothing is
+            # sent to Gemini unless EchoGuard distinguishes the user's voice
+            # from the sound coming back through the speakers.
+            if self._speaking.is_set() and not self._barge_pending.is_set():
+                try:
+                    samples = np.frombuffer(pcm, dtype="<i2").astype(np.float32)
+                    level = float(np.sqrt(np.mean(samples * samples))) / 32768.0 if samples.size else 0.0
+                    user_speech = self._echo.is_user_speech(pcm, INPUT_RATE, level)
+                    confirmed = self._echo.ready_for_barge_in and user_speech
+                    captured = self._barge.observe(pcm, confirmed, self._echo.required_blocks)
+                    if captured:
+                        self._barge_pending.set()
+                        self._loop.call_soon_threadsafe(self._barge_in, captured)
+                except Exception:
+                    self._barge.reset()
 
         def speaker_callback(outdata, frames, timing, status):
             needed = frames * 2
@@ -208,6 +245,7 @@ class LiveVoice:
             if not self._pending and self._output.empty() and self._speaking.is_set() and self._turn_complete:
                 self._speaking.clear()
                 if self._loop:
+                    self._loop.call_soon_threadsafe(self._finish_playback)
                     self._loop.call_soon_threadsafe(self.emit, {"type": "voice_state", "state": "listening" if self._ptt_held.is_set() else "idle"})
 
         self._mic_callback = mic_callback
@@ -251,13 +289,36 @@ class LiveVoice:
         self._mic_queue.put_nowait(pcm)
 
     def _barge_in(self, captured: list[bytes]):
+        # Called on the asyncio loop after sustained, echo-filtered speech.
         self._interrupted = True
         self._stop_audio()
         self._echo.reset()
         self._barge.reset()
+        self._auto_silence_blocks = 0
+        self._auto_capture.set()
+        self._barge_pending.clear()
         self.emit({"type": "voice_state", "state": "listening"})
         for block in captured:
             self._queue_mic(block)
+
+    def _end_auto_capture(self):
+        if not self._auto_capture.is_set():
+            return
+        self._auto_capture.clear()
+        self._auto_silence_blocks = 0
+        self._queue_end_marker()
+        if not self._speaking.is_set() and not self._ptt_held.is_set():
+            self._stop_microphone()
+        self.emit({"type": "voice_state", "state": "thinking"})
+
+    def _finish_playback(self):
+        # The output device has drained the completed turn. Keep the mic open
+        # only for a held PTT session or an utterance already captured by barge-in.
+        if not self._ptt_held.is_set() and not self._auto_capture.is_set():
+            self._stop_microphone()
+            self._echo.reset()
+            self._barge.reset()
+            self._barge_pending.clear()
 
     def _stop_audio(self):
         self._speaking.clear()
@@ -298,6 +359,12 @@ class LiveVoice:
             if response.data and not self._interrupted:
                 self._turn_complete = False
                 self._speaking.set()
+                # Open the mic for local-only barge-in detection while Yon speaks.
+                if not self._ptt_held.is_set() and not self._auto_capture.is_set():
+                    try:
+                        self._start_microphone()
+                    except Exception as exc:
+                        self.emit({"type": "voice_error", "text": f"Detecção de interrupção por voz indisponível: {exc}"})
                 self.emit({"type": "voice_state", "state": "speaking"})
                 for offset in range(0, len(response.data), 2400):
                     chunk = response.data[offset:offset + 2400]
