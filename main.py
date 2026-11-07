@@ -1056,14 +1056,18 @@ class JarvisLive:
                     )
                     # Wait for a fresh server turn_complete and drained audio.
                     deadline = time.monotonic() + 150.0
+                    delivery_finished = False
                     while time.monotonic() < deadline:
                         with self._speaking_lock:
                             still_speaking = self._is_speaking
                         queued_audio = bool(self.audio_in_queue and not self.audio_in_queue.empty())
                         turn_finished = self._last_turn_complete_at > 0.0
                         if turn_finished and not still_speaking and not queued_audio and not self._tail_active():
+                            delivery_finished = True
                             break
                         await asyncio.sleep(0.2)
+                    if not delivery_finished:
+                        raise asyncio.TimeoutError("No completed announcement turn was observed.")
                     with self._background_task_lock:
                         live_record = self._background_task_records.get(task_id)
                         if live_record:
