@@ -36,8 +36,10 @@ DEFAULT_INBOX = Path(__file__).resolve().parents[1] / "knowledge" / "inbox"
 def _connect():
     path = Path(store.DB_PATH)
     path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(path), timeout=15)
-    conn.execute("PRAGMA busy_timeout=15000")
+    conn = sqlite3.connect(str(path), timeout=30)
+    conn.execute("PRAGMA busy_timeout=30000")
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("""
         CREATE TABLE IF NOT EXISTS github_inbox_receipts(
             source_path TEXT PRIMARY KEY,
@@ -188,16 +190,6 @@ def _process_inbox(root=None, interpreter=None) -> dict:
                     if old and old[0] == digest:
                         counts["already_processed"] += 1
                         continue
-                    if old and old[0] != digest:
-                        # A changed file is a new revision of the same inbox item.
-                        # Retire undelivered one-shot messages from the old revision.
-                        conn.execute(
-                            "UPDATE live_speech_directives SET status='superseded' "
-                            "WHERE source_path=? AND status='pending'", (rel,))
-                        conn.execute(
-                            "UPDATE startup_directives SET status='superseded' "
-                            "WHERE source_path=? AND status='pending'", (rel,))
-
                     result = (interpreter or _interpret)(text, path.name)
                     if not isinstance(result, dict):
                         raise ValueError("Interpreter returned an invalid result.")
@@ -225,6 +217,15 @@ def _process_inbox(root=None, interpreter=None) -> dict:
                         source=f"github_inbox:{rel}#{digest[:12]}", state="hypothesis", evidence="")
                     if not memory_id:
                         raise RuntimeError("SQLite memory write failed.")
+                    if old and old[0] != digest:
+                        # Do not hold a write transaction while the cognitive store
+                        # writes to the same SQLite database through another connection.
+                        conn.execute(
+                            "UPDATE live_speech_directives SET status='superseded' "
+                            "WHERE source_path=? AND status='pending'", (rel,))
+                        conn.execute(
+                            "UPDATE startup_directives SET status='superseded' "
+                            "WHERE source_path=? AND status='pending'", (rel,))
                     if kind == "startup_once":
                         conn.execute(
                             "INSERT OR IGNORE INTO startup_directives"
@@ -261,10 +262,17 @@ def _process_inbox(root=None, interpreter=None) -> dict:
 
 
 def process_inbox(root=None, interpreter=None) -> dict:
-    """Serialize local and remote inbox imports to prevent duplicate writes."""
-    with _PROCESS_LOCK:
+    """Serialize inbox imports with all cognitive-store access in this process."""
+    with _PROCESS_LOCK, store._LOCK:
         return _process_inbox(root=root, interpreter=interpreter)
 
+
+
+class GitHubRateLimitError(RuntimeError):
+    """GitHub asked the inbox monitor to pause API requests."""
+    def __init__(self, message: str, retry_after: int):
+        super().__init__(message)
+        self.retry_after = max(30, min(int(retry_after), 3600))
 
 
 def _github_json(url: str, etag: str | None = None):
@@ -286,6 +294,26 @@ def _github_json(url: str, etag: str | None = None):
     except urllib.error.HTTPError as exc:
         if exc.code == 304:
             return None, etag, True
+        if exc.code in (403, 429):
+            headers = exc.headers or {}
+            retry_after = 0
+            try:
+                retry_after = int(headers.get("Retry-After", "0"))
+            except (TypeError, ValueError):
+                pass
+            if retry_after <= 0:
+                try:
+                    reset_at = int(headers.get("X-RateLimit-Reset", "0"))
+                    retry_after = max(0, reset_at - int(datetime.now(timezone.utc).timestamp()))
+                except (TypeError, ValueError):
+                    pass
+            if retry_after <= 0:
+                retry_after = 60
+            remaining = headers.get("X-RateLimit-Remaining", "unknown")
+            raise GitHubRateLimitError(
+                f"GitHub API limit reached (HTTP {exc.code}, remaining={remaining}).",
+                retry_after,
+            ) from exc
         raise
 
 
@@ -365,6 +393,10 @@ def process_remote_inbox() -> dict:
             result = process_inbox(root=root)
             result["remote_files_seen"] = len(documents)
             return result
+    except GitHubRateLimitError as exc:
+        return {"ok": False, "processed": 0, "already_processed": 0,
+                "skipped": 0, "retry_after": exc.retry_after,
+                "errors": [str(exc)]}
     except Exception as exc:
         return {"ok": False, "processed": 0, "already_processed": 0,
                 "skipped": 0, "errors": [f"{type(exc).__name__}: {exc}"]}
