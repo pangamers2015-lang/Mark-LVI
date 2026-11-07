@@ -14,6 +14,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 from core import appidentity, outcome
+from core.page_monitor import wait_for_page_change
+from core.chat_interaction import interact_with_chat
 
 # Importing playwright cost 198 ms at every launch, paid by action discovery
 # whether or not a browser was ever opened. It is the second-largest import in
@@ -526,11 +528,13 @@ def _open_native(url: str, browser_name: Optional[str]) -> str:
 class _BrowserSession:
     """
     A full session for one browser instance.
-    All browsers open on the real profile via launch_persistent_context.
+    Visible sessions use the established browser-profile policy; headless
+    sessions use isolated persistent Yon profiles.
     """
 
-    def __init__(self, browser_name: str):
+    def __init__(self, browser_name: str, headless: bool = False):
         self.browser_name = browser_name
+        self.headless = bool(headless)
         self._spec        = _resolve_browser(browser_name)
 
         self._loop:    asyncio.AbstractEventLoop | None = None
@@ -623,11 +627,14 @@ class _BrowserSession:
         engine_obj  = getattr(self._pw, engine_name)
 
         if engine_name == "firefox":
-            profile = _firefox_profile_dir() or str(
-                Path.home() / ".jarvis_profiles" / "firefox"
+            profile = (
+                str(Path.home() / ".yon_profiles" / "firefox_headless")
+                if self.headless else
+                (_firefox_profile_dir() or str(Path.home() / ".jarvis_profiles" / "firefox"))
             )
+            Path(profile).mkdir(parents=True, exist_ok=True)
             kwargs: dict = {
-                "headless":    False,
+                "headless":    self.headless,
                 "slow_mo":     0,
                 "viewport":    None,
                 "no_viewport": True,
@@ -639,7 +646,11 @@ class _BrowserSession:
                 self._context = await engine_obj.launch_persistent_context(profile, **kwargs)
             except Exception as e:
                 print(f"[Browser] Firefox real profile failed ({e}), using JARVIS profile")
-                jarvis = str(Path.home() / ".jarvis_profiles" / "firefox_jarvis")
+                jarvis = str(
+                    Path.home() / ".yon_profiles" / "firefox_headless_fallback"
+                    if self.headless else
+                    Path.home() / ".jarvis_profiles" / "firefox_jarvis"
+                )
                 Path(jarvis).mkdir(parents=True, exist_ok=True)
                 self._context = await engine_obj.launch_persistent_context(jarvis, **kwargs)
 
@@ -648,10 +659,12 @@ class _BrowserSession:
             return
 
         if engine_name == "webkit":
-            safari_profile = str(Path.home() / ".jarvis_profiles" / "safari")
+            safari_profile = str(
+                Path.home() / ".yon_profiles" / ("safari_headless" if self.headless else "safari")
+            )
             Path(safari_profile).mkdir(parents=True, exist_ok=True)
             kwargs = {
-                "headless":    False,
+                "headless":    self.headless,
                 "slow_mo":     0,
                 "viewport":    None,
                 "no_viewport": True,
@@ -662,10 +675,14 @@ class _BrowserSession:
             print(f"[Browser] ✅ Safari launched")
             return
 
-        profile = _real_profile_dir(self.browser_name)
+        profile = (
+            str(Path.home() / ".yon_profiles" / (self.browser_name + "_headless"))
+            if self.headless else _real_profile_dir(self.browser_name)
+        )
+        Path(profile).mkdir(parents=True, exist_ok=True)
 
         kwargs = {
-            "headless":    False,
+            "headless":    self.headless,
             "slow_mo":     0,
             "viewport":    None,
             "no_viewport": True,
@@ -704,7 +721,7 @@ class _BrowserSession:
         # answers in milliseconds, and core/appidentity was already built to
         # ask it. Knowing up front turns a long silence into an immediate,
         # explainable outcome.
-        already = appidentity.running(self.browser_name)
+        already = appidentity.running(self.browser_name) if not self.headless else []
         if already:
             print(f"[Browser] {self.browser_name} is already running "
                   f"({len(already)} processes) — its profile is locked, so the "
@@ -713,7 +730,7 @@ class _BrowserSession:
             try:
                 self._context = await engine_obj.launch_persistent_context(profile, **kwargs)
                 self._page = await self._adopt_page()
-                self.profile_kind = "real"
+                self.profile_kind = "separate" if self.headless else "real"
                 print(f"[Browser] ✅ Launched [{label}] profile={profile}")
                 return
             except Exception as e:
@@ -723,7 +740,11 @@ class _BrowserSession:
         # profile / newer Chrome versions block the real profile under
         # automation). Fall back to a persistent JARVIS automation profile —
         # accounts logged in here once stay logged in on later sessions too.
-        jarvis_profile = str(Path.home() / ".jarvis_profiles" / self.browser_name)
+        jarvis_profile = str(
+            Path.home() / ".yon_profiles" / (self.browser_name + "_headless_fallback")
+            if self.headless else
+            Path.home() / ".jarvis_profiles" / self.browser_name
+        )
         Path(jarvis_profile).mkdir(parents=True, exist_ok=True)
         print(f"[Browser] Retrying with JARVIS profile: {jarvis_profile}")
 
@@ -864,6 +885,31 @@ class _BrowserSession:
         except Exception as e:
             return f"Could not get page text: {e}"
 
+    async def wait_for_change(
+        self, timeout_ms: int = 30_000, quiet_ms: int = 900,
+        selector: str = "body", max_chars: int = 8_000,
+    ) -> str:
+        """Wait for new visible page text and return it after streaming settles."""
+        page = await self._get_page()
+        try:
+            return await wait_for_page_change(
+                page, timeout_ms=timeout_ms, quiet_ms=quiet_ms,
+                selector=selector, max_chars=max_chars,
+            )
+        except Exception as e:
+            return f"Could not monitor page changes: {e}"
+
+    async def chat_message(
+        self, message: str, input_selector: str = "",
+        send_selector: str = "", confirm_send: bool = False,
+    ) -> str:
+        """Find a chat composer, fill it, and send only after explicit approval."""
+        page = await self._get_page()
+        return await interact_with_chat(
+            page, message=message, input_selector=input_selector,
+            send_selector=send_selector, confirm_send=confirm_send,
+        )
+
     async def get_url(self) -> str:
         page = await self._get_page()
         return page.url
@@ -988,17 +1034,19 @@ class _SessionRegistry:
 
     def __init__(self):
         self._sessions:        dict[str, _BrowserSession] = {}
+        self._background_sessions: dict[str, _BrowserSession] = {}
         self._active_browser:  str                        = ""
         self._lock             = threading.Lock()
         self._last_native_url: str                        = ""
 
-    def has(self, browser_name: str | None = None) -> bool:
+    def has(self, browser_name: str | None = None, background: bool = False) -> bool:
         """Is there an active automation session for this browser (or any)?"""
         with self._lock:
+            sessions = self._background_sessions if background else self._sessions
             if not browser_name:
-                return bool(self._sessions)
+                return bool(sessions)
             name = _ALIASES.get(browser_name.lower().strip(), browser_name.lower().strip())
-            return name in self._sessions
+            return name in sessions
 
     def note_native_url(self, url: str) -> None:
         self._last_native_url = url
@@ -1008,20 +1056,21 @@ class _SessionRegistry:
         url, self._last_native_url = self._last_native_url, ""
         return url
 
-    def _get_or_create(self, browser_name: str) -> _BrowserSession:
+    def _get_or_create(self, browser_name: str, background: bool = False) -> _BrowserSession:
+        sessions = self._background_sessions if background else self._sessions
         with self._lock:
-            if browser_name not in self._sessions:
-                sess = _BrowserSession(browser_name)
+            if browser_name not in sessions:
+                sess = _BrowserSession(browser_name, headless=background)
                 sess.start()
-                self._sessions[browser_name] = sess
-                print(f"[Registry] New session: {browser_name}")
-            return self._sessions[browser_name]
+                sessions[browser_name] = sess
+                print(f"[Registry] New session: {browser_name}" + (" (background)" if background else ""))
+            return sessions[browser_name]
 
-    def get(self, browser_name: str | None = None) -> _BrowserSession:
+    def get(self, browser_name: str | None = None, background: bool = False) -> _BrowserSession:
         if not browser_name:
             browser_name = self._active_browser or _detect_default_browser()
         browser_name = _ALIASES.get(browser_name.lower().strip(), browser_name.lower().strip())
-        sess = self._get_or_create(browser_name)
+        sess = self._get_or_create(browser_name, background=background)
         self._active_browser = browser_name
         return sess
 
@@ -1033,19 +1082,25 @@ class _SessionRegistry:
 
     def close_one(self, browser_name: str) -> str:
         with self._lock:
-            sess = self._sessions.pop(browser_name, None)
-        if sess:
-            sess.close()
-            if self._active_browser == browser_name:
-                self._active_browser = ""
-            return f"{browser_name} closed."
-        return f"No active session for: {browser_name}"
+            visible = self._sessions.pop(browser_name, None)
+            background = self._background_sessions.pop(browser_name, None)
+        closed = []
+        for label, sess in (("visible", visible), ("background", background)):
+            if sess:
+                sess.close()
+                closed.append(label)
+        if self._active_browser == browser_name:
+            self._active_browser = ""
+        return f"{browser_name} closed ({', '.join(closed)})." if closed else f"No active session for: {browser_name}"
 
     def close_all(self) -> str:
         with self._lock:
-            names    = list(self._sessions.keys())
-            sessions = list(self._sessions.values())
+            names = list(self._sessions.keys()) + [
+                f"{name} (background)" for name in self._background_sessions
+            ]
+            sessions = list(self._sessions.values()) + list(self._background_sessions.values())
             self._sessions.clear()
+            self._background_sessions.clear()
             self._active_browser = ""
         for s in sessions:
             try:
@@ -1056,12 +1111,14 @@ class _SessionRegistry:
 
     def list_sessions(self) -> str:
         with self._lock:
-            if not self._sessions:
+            if not self._sessions and not self._background_sessions:
                 return "No active browser sessions."
             lines = []
             for name in self._sessions:
                 marker = " ◀ active" if name == self._active_browser else ""
                 lines.append(f"  • {name}{marker}")
+            for name in self._background_sessions:
+                lines.append(f"  • {name} (background)")
             return "Open browsers:\n" + "\n".join(lines)
 
 
@@ -1100,15 +1157,14 @@ def browser_control(
         _log(player, result)
         return result
 
-    # ── Navigation is ALWAYS native ──────────────────────────────────────────
-    # go_to / search / new_tab open the site in the user's own browser —
-    # their own profile, logged-in accounts and start page; exactly as if the
-    # user had opened it themselves. A controlled window with about:blank never
-    # opens here. The only exception: if an automation flow is already running,
-    # navigation continues in that window (so multi-step tasks aren't split).
+    # ── Navigation defaults to the user's native browser ───────────────────────
+    # A requested headless background session, or an already active automation
+    # session, keeps navigation inside Playwright so the same page can be read
+    # and controlled by subsequent actions.
+    background = bool(params.get("background", False))
     if action in ("go_to", "search", "new_tab"):
-        if _registry.has(browser):
-            sess = _registry.get(browser)
+        if background or _registry.has(browser):
+            sess = _registry.get(browser, background=background)
             try:
                 if action == "search":
                     result = sess.run(sess.search(params.get("query", ""),
@@ -1142,7 +1198,7 @@ def browser_control(
     # only opens here, and as soon as it opens it goes to the user's last
     # navigated page — it doesn't sit on a blank page.
     try:
-        sess = _registry.get(browser)
+        sess = _registry.get(browser, background=background)
     except Exception as e:
         result = f"Could not start browser session: {e}"
         _log(player, result)
@@ -1171,6 +1227,20 @@ def browser_control(
             result = sess.run(sess.smart_type(params.get("description", ""), params.get("text", "")))
         elif action == "get_text":
             result = sess.run(sess.get_text())
+        elif action == "wait_for_change":
+            result = sess.run(sess.wait_for_change(
+                timeout_ms=int(params.get("timeout_ms", 30_000)),
+                quiet_ms=int(params.get("quiet_ms", 900)),
+                selector=params.get("selector", "body"),
+                max_chars=int(params.get("max_chars", 8_000)),
+            ), timeout=65)
+        elif action == "chat_message":
+            result = sess.run(sess.chat_message(
+                message=params.get("message", ""),
+                input_selector=params.get("input_selector", ""),
+                send_selector=params.get("send_selector", ""),
+                confirm_send=bool(params.get("confirm_send", False)),
+            ))
         elif action == "get_url":
             result = sess.run(sess.get_url())
         elif action == "press":
@@ -1206,9 +1276,12 @@ def _log(player, text: str):
 
 # ── Tool declaration (auto-discovered by core/action_loader.py) ──────────────
 TOOL = {
+    "behavior": "NON_BLOCKING",
+    "scheduling": "WHEN_IDLE",
     "name": "browser_control",
     "description": (
-        "Controls the web browser: open an address, search, click, type, "
+        "Controls the web browser: open pages visibly or in headless background mode, "
+        "search, click, type, prepare chat messages, send approved messages, monitor page updates, "
         "scroll, read the page, manage tabs, go back and forward. "
         "THIS TOOL OPENS THE BROWSER ITSELF. Never call open_app for the "
         "browser first - doing both launches it twice, the second copy on a "
@@ -1230,11 +1303,15 @@ TOOL = {
         "properties": {
             "action": {
                 "type": "STRING",
-                "description": "go_to | search | click | type | scroll | fill_form | smart_click | smart_type | get_text | get_url | press | new_tab | close_tab | screenshot | back | forward | reload | switch | list_browsers | close | close_all"
+                "description": "go_to | search | click | type | scroll | fill_form | smart_click | smart_type | get_text | wait_for_change | chat_message | get_url | press | new_tab | close_tab | screenshot | back | forward | reload | switch | list_browsers | close | close_all"
             },
             "browser": {
                 "type": "STRING",
                 "description": "Target browser: chrome | edge | firefox | opera | operagx | brave | vivaldi | safari. Omit to use the currently active browser."
+            },
+            "background": {
+                "type": "BOOLEAN",
+                "description": "Use a headless browser without a visible window. It has a separate persistent Yon profile and may need its own sign-in. Pass background=true on every following browser action to keep using this session."
             },
             "url": {
                 "type": "STRING",
@@ -1275,6 +1352,34 @@ TOOL = {
             "path": {
                 "type": "STRING",
                 "description": "Save path for screenshot"
+            },
+            "message": {
+                "type": "STRING",
+                "description": "Message to place in the detected chat composer."
+            },
+            "input_selector": {
+                "type": "STRING",
+                "description": "Optional CSS selector for the exact chat message field."
+            },
+            "send_selector": {
+                "type": "STRING",
+                "description": "Optional CSS selector for the exact send button."
+            },
+            "confirm_send": {
+                "type": "BOOLEAN",
+                "description": "Must be true only after the user explicitly approved sending this exact message. Otherwise the message is only prepared in the field."
+            },
+            "timeout_ms": {
+                "type": "INTEGER",
+                "description": "Maximum wait for page text changes, 1000-60000 ms (default 30000)."
+            },
+            "quiet_ms": {
+                "type": "INTEGER",
+                "description": "Quiet period before returning updated text, 200-5000 ms (default 900)."
+            },
+            "max_chars": {
+                "type": "INTEGER",
+                "description": "Maximum returned text length (default 8000)."
             },
             "incognito": {
                 "type": "BOOLEAN",

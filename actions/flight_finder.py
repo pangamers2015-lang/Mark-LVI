@@ -361,6 +361,8 @@ def flight_finder(parameters: dict, player=None, speak=None) -> str:
 
 # ── Tool declaration (auto-discovered by core/action_loader.py) ──────────────
 TOOL = {
+    "behavior": "NON_BLOCKING",
+    "scheduling": "WHEN_IDLE",
     "name": "flight_finder",
     "description": "Searches Google Flights and speaks the best options.",
     "parameters": {

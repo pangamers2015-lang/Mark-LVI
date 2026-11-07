@@ -18,6 +18,7 @@ config/whatsapp_web/          # a LINKED WhatsApp session — committing it hand
 # ── Personal data the assistant accumulates about you ─────────────────────────
 memory/long_term.json
 memory/*.db
+memory/*.sqlite3
 
 # ── Python build noise ────────────────────────────────────────────────────────
 __pycache__/
@@ -48,3 +49,6 @@ desktop.ini
 logs/
 downloads/
 screenshots/
+
+# Yon autonomous capability-development sandboxes (local runtime data)
+.yon_capability_lab/

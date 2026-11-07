@@ -1,0 +1,7 @@
+# Yon learning inbox
+
+Place user-authored UTF-8 .txt files in this folder (subfolders are also scanned). Yon monitors the configured GitHub branch while its live session is connected, checking every 15 seconds by default. After the monitor code has been installed once, new TXT files can be committed to GitHub and are fetched directly by Yon; you do not need to run git pull for each new TXT or restart the app.
+
+The central brain interprets each new file using relevant existing cognitive memories. Knowledge and procedures are stored as semantic memories in SQLite and synchronized to generated Obsidian notes when a vault is configured. A direct, simple request to speak a short phrase (for example, “Fale 1 2 3”) is queued and spoken through the existing voice session at the next safe conversational pause. A clearly specified next-startup instruction remains queued for the next startup greeting.
+
+Limits: UTF-8 TXT only, 1–32,000 bytes per file. Each relative path is processed once; use a new filename for a new update. Files are data, never executable code. The inbox cannot run shell commands, install software, access secrets, or perform destructive actions. No new package or API key is required for the public repository. For a private repository, configure YON_GITHUB_TOKEN locally; never commit it. Optional settings: YON_GITHUB_REPOSITORY, YON_GITHUB_BRANCH, and YON_GITHUB_POLL_SECONDS (10–300 seconds).

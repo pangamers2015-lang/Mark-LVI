@@ -49,11 +49,22 @@ import sounddevice as sd
 import numpy as np
 from google import genai
 from google.genai import types
-from ui import JarvisUI
+from web_ui import JarvisUI
 from memory.memory_manager import (
     load_memory, update_memory, format_memory_for_prompt,
     save_session_summary, pop_last_session,
-    search_memory, set_trim_notifier,
+    search_memory, set_trim_notifier, get_behavior_preferences,
+    set_behavior_preferences as persist_behavior_preferences,
+    infer_behavior_preferences_from_text,
+)
+from memory.learning_store import (
+    learn_from_user_text, format_learning_for_prompt,
+)
+from memory.continuity_store import record_turn, format_recent_context
+from memory.cognitive_runtime import (
+    build_context as build_cognitive_context,
+    record_user_turn as cognitive_record_user_turn,
+    save_task_checkpoint as cognitive_save_checkpoint,
 )
 
 # The file-backed tools (open_app, web_search, browser_control, …) are no longer
@@ -63,6 +74,8 @@ from memory.memory_manager import (
 # (screen_process, close_camera, save_memory, manage_monitor, shutdown_jarvis,
 # system_status).
 from core import outcome
+from core import work_journal
+from core.background_notifications import build_task_notification
 from core.action_loader import strip_meta
 from actions.screen_processor  import _capture_camera, _capture_screen
 from actions.system_monitor    import SystemMonitor, get_system_status
@@ -371,6 +384,41 @@ TOOL_DECLARATIONS = [
     # tools live in their own action file and are auto-discovered by
     # core.action_loader (see JarvisLive.__init__).
     {
+        "name": "show_card",
+        "description": (
+            "Shows a visual information card in the Yon interface. Use this for "
+            "important results that benefit from a popup, especially football match "
+            "scores, news, concise visual summaries, and whenever the user explicitly asks " 
+            "to put a link on screen. For a match, provide home_team, "
+            "away_team, score, and verified home_logo/away_logo image URLs when available. "
+            "Never invent scores, teams, logos, or image URLs. Put source URLs in text; "
+            "they become clickable. Use after researching and verifying the information."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "title": {"type": "STRING", "description": "Short card title"},
+                "text": {"type": "STRING", "description": "Concise explanation and source URLs"},
+                "card": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "home_team": {"type": "STRING"},
+                        "away_team": {"type": "STRING"},
+                        "score": {"type": "STRING"},
+                        "home_logo": {"type": "STRING", "description": "Verified HTTPS/HTTP logo URL"},
+                        "away_logo": {"type": "STRING", "description": "Verified HTTPS/HTTP logo URL"},
+                        "competition": {"type": "STRING"},
+                        "date": {"type": "STRING"},
+                        "status": {"type": "STRING"},
+                        "image": {"type": "STRING", "description": "Optional verified image URL"},
+                        "image_alt": {"type": "STRING"}
+                    }
+                }
+            },
+            "required": ["title", "text"]
+        }
+    },
+    {
         "name": "system_status",
         "description": (
             "Returns real-time system metrics: CPU usage, RAM, GPU load, CPU temperature, "
@@ -479,6 +527,35 @@ TOOL_DECLARATIONS = [
         }
     },
     {
+        "name": "set_behavior_preferences",
+        "description": (
+            "Persist a standing preference about how the assistant should behave in future sessions. "
+            "Use this when the user asks for an ongoing behavior change, not for a one-time request. "
+            "For example, set announce_time_at_startup=false when they do not want the time announced, "
+            "or deliver_news_at_startup=false when they do not want startup news. "
+            "Set startup_greeting_style when they describe their preferred greeting. "
+            "Do not claim the preference was learned unless this tool succeeds."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "announce_time_at_startup": {
+                    "type": "BOOLEAN",
+                    "description": "Whether to announce the current time during startup greeting."
+                },
+                "deliver_news_at_startup": {
+                    "type": "BOOLEAN",
+                    "description": "Whether to fetch and speak news during startup."
+                },
+                "startup_greeting_style": {
+                    "type": "STRING",
+                    "description": "A concise persistent style preference for the startup greeting, such as 'brief, calm, warm and natural'."
+                },
+            },
+            "required": [],
+        }
+    },
+    {
         "name": "recall_memory",
         "description": (
             "Look up a fact you have stored about the user but which is NOT in "
@@ -581,10 +658,49 @@ class JarvisLive:
         self.audio_in_queue       = None
         self.out_queue            = None
         self._loop                     = None
+        self._shutdown_requested = threading.Event()
+        self._shutdown_event = None
+        self._audio_capture_lock = threading.RLock()
+        self._audio_capture_condition = threading.Condition(self._audio_capture_lock)
+        self._audio_callbacks_active = 0
+        self._background_task_lock = threading.RLock()
+        self._restart_when_idle = False
+        self._background_task_records = {
+            item["id"]: item for item in work_journal.list_tasks()
+            if isinstance(item, dict) and item.get("id")
+        }
+        # Completed background work is announced through one serialized queue.
+        # Pending/delivering records survive reconnects and process restarts.
+        for _item in self._background_task_records.values():
+            if _item.get("notification_status") == "delivering":
+                _item["notification_status"] = "pending"
+                work_journal.save_task(_item)
+        self._background_notification_event = None
+        self._last_turn_complete_at = 0.0
+        self._background_task_seq = max(
+            (int(str(key).split("-")[-1]) for key in self._background_task_records
+             if str(key).startswith("BG-") and str(key).split("-")[-1].isdigit()),
+            default=0,
+        )
+        _recovered_work = work_journal.recover_interrupted()
+        for _item in _recovered_work:
+            _item["notification_status"] = "pending"
+            self._background_task_records[_item["id"]] = _item
+            work_journal.save_task(_item)
+            try:
+                cognitive_save_checkpoint(
+                    summary=f"Background task {_item.get('id')} was interrupted by an application restart.",
+                    next_step="Inspect the task record and current external state before deciding whether it is safe to resume.",
+                    status="interrupted",
+                    evidence=str(_item.get("recovery") or "Recovered from the local work journal."),
+                )
+            except Exception as _brain_error:
+                print(f"[YonBrain] Recovery checkpoint skipped: {_brain_error}")
         self._is_speaking         = False
         self._speaking_lock       = threading.Lock()
         self._phone_active        = False   # True while phone mic is streaming; pauses PC mic
         self._pending_vision       = None    # (img_bytes, mime_type, question, angle) to inject after tool response
+        self._pending_search_popup_query = None  # show synthesized answers, never raw listings
         self._vision_cam_active    = False   # True if camera was opened for vision → auto-close after response
         self._vision_close_pending = False   # True after vision injected; next turn_complete closes camera
         self._vision_last_time     = 0.0     # monotonic time of last screen_process call (cooldown guard)
@@ -632,6 +748,8 @@ class JarvisLive:
         self.ui.on_interrupt      = self.interrupt
         self.ui.on_voice_change   = self._on_voice_change     # voice picker → rebuild session
         self.ui.on_audio_device_change = self._on_audio_device_change
+        self.ui.get_background_tasks = self._get_background_tasks
+        self.ui.defer_restart_until_idle = self._defer_restart_until_idle
         self._reconnect_event: asyncio.Event | None = None
         self._reconnect_keep = True   # False → next rebuild drops the resumption handle
 
@@ -650,6 +768,7 @@ class JarvisLive:
         # conversation that never ends never produces a summary, and the
         # "yesterday we talked about…" line silently disappears.
         self._resume_handle: str | None = None
+        self._session_connected_at = 0.0
         self._turn_done_event: asyncio.Event | None = None
         self._dashboard     = None
         self._briefing_sent    = False          # morning briefing fires once per process
@@ -799,6 +918,294 @@ class JarvisLive:
         # what they are waiting to see.
         return wake_install(logger=lambda m: print(f"[Wake] {m}"),
                             notify=lambda m: self.ui.write_log(f"SYS: {m}"))
+
+    def _defer_restart_until_idle(self) -> None:
+        """Defer a self-update restart until every other background task finishes."""
+        with self._background_task_lock:
+            self._restart_when_idle = True
+        self._maybe_restart_when_idle()
+
+    def _maybe_restart_when_idle(self) -> None:
+        with self._background_task_lock:
+            if not self._restart_when_idle:
+                return
+            if any(
+                item.get("status") == "running"
+                or item.get("notification_status") in ("pending", "delivering")
+                for item in self._background_task_records.values()
+            ):
+                return
+            self._restart_when_idle = False
+        print("[JARVIS] Background work is idle; handing off to the self-updater.")
+        self.ui.root.after(700, self.ui.root.quit)
+
+    def _get_background_tasks(self, task_id: str = "") -> list[dict]:
+        """Thread-safe snapshot used by the background_tasks action."""
+        with self._background_task_lock:
+            if task_id:
+                record = self._background_task_records.get(task_id)
+                return [dict(record)] if record else []
+            return [
+                dict(record)
+                for record in sorted(
+                    self._background_task_records.values(),
+                    key=lambda item: item["started_at"],
+                    reverse=True,
+                )
+            ]
+
+    def _schedule_capability_recovery(self, failed_tool: str, args: dict, failure_result: str):
+        """Automatically investigate explicit missing-capability failures in the background."""
+        if failed_tool == "capability_recovery":
+            return None
+        try:
+            from actions.capability_recovery import _safe_failure, is_capability_failure
+            if not is_capability_failure(failed_tool, args, failure_result):
+                return None
+            if not self._action_registry.has("capability_recovery"):
+                print("[CapabilityRecovery] Action unavailable; automatic investigation skipped.")
+                return None
+
+            import hashlib as _hashlib
+            safe_summary = str(
+                args.get("task") or args.get("query") or args.get("path")
+                or args.get("folder") or args.get("file_path") or failed_tool
+            )[:180]
+            safe_summary = _safe_failure(safe_summary)
+            fingerprint = _hashlib.sha256(
+                (str(failed_tool) + "|" + safe_summary + "|" + str(failure_result)[:500]).encode("utf-8", "replace")
+            ).hexdigest()
+            with self._background_task_lock:
+                for existing in self._background_task_records.values():
+                    if (existing.get("capability_fingerprint") == fingerprint
+                            and existing.get("status") == "running"):
+                        return existing.get("id")
+                self._background_task_seq += 1
+                task_id = f"BG-{self._background_task_seq:04d}"
+                payload = {
+                    "task": safe_summary,
+                    "failed_tool": str(failed_tool)[:100],
+                    "failed_args": args or {},
+                    "limitation": str(failure_result)[:2500],
+                    "failure_result": str(failure_result)[:2500],
+                }
+                record = {
+                    "id": task_id,
+                    "name": "capability_recovery",
+                    "summary": f"Investigate missing capability after {failed_tool}: {safe_summary}"[:240],
+                    "status": "running",
+                    "result": "",
+                    "started_at": datetime.now().isoformat(timespec="seconds"),
+                    "finished_at": "",
+                    "notification_status": "not_required",
+                    "capability_fingerprint": fingerprint,
+                }
+                self._background_task_records[task_id] = record
+                work_journal.save_task(record)
+                try:
+                    cognitive_save_checkpoint(
+                        summary=f"Automatic capability investigation {task_id} started after {failed_tool} reported a capability limitation.",
+                        next_step="Research a safe solution with FCC Cloud and prepare an approval note; do not install or modify production.",
+                        status="running",
+                        evidence=str(failure_result)[:2500],
+                    )
+                except Exception as _brain_error:
+                    print(f"[YonBrain] Capability recovery checkpoint skipped: {_brain_error}")
+
+            asyncio.create_task(
+                self._run_background_tool(task_id, "capability_recovery", payload, "action"),
+                name=f"background:{task_id}:capability_recovery",
+            )
+            print(f"[CapabilityRecovery] Automatic investigation {task_id} started after {failed_tool}.")
+            return task_id
+        except Exception as exc:
+            print(f"[CapabilityRecovery] Could not schedule automatic investigation: {exc}")
+            return None
+
+    async def _run_background_tool(
+        self, task_id: str, name: str, args: dict, source: str
+    ) -> None:
+        """Run an opted-in action/plugin without occupying the live receive loop."""
+        result = ""
+        status = "failed"
+        try:
+            loop = asyncio.get_running_loop()
+            if source == "action":
+                ctx = {
+                    "player": self.ui,
+                    "speak": self.speak,
+                    "response": None,
+                    "session_memory": None,
+                }
+                raw = await loop.run_in_executor(
+                    None,
+                    lambda: self._action_registry.run(name, args, ctx),
+                )
+            else:
+                raw = await loop.run_in_executor(
+                    None,
+                    lambda: self._plugin_registry.run(
+                        name, args, player=self.ui, session_memory=None
+                    ),
+                )
+            result = str(raw or "Done.")
+            _result_lower = result.lower()
+            status = "failed" if _result_lower.startswith(
+                ("status=failed ", "tool '", "plugin '", "action '",
+                 "search failed", "failed:", "fcc execution failed",
+                 "fcc exited with code", "fcc reported an execution error",
+                 "fcc task timed out", "fcc output could not be interpreted",
+                 "fcc task not started")
+            ) else "completed"
+            if name != "capability_recovery":
+                self._schedule_capability_recovery(name, args, result)
+
+        except Exception as exc:
+            result = f"{type(exc).__name__}: {exc}"
+            status = "failed"
+            traceback.print_exc()
+
+        with self._background_task_lock:
+            record = self._background_task_records.get(task_id)
+            if record is not None:
+                record["status"] = status
+                record["result"] = result
+                record["finished_at"] = datetime.now().isoformat(timespec="seconds")
+                work_journal.save_task(record)
+                try:
+                    cognitive_save_checkpoint(
+                        summary=f"Background task {task_id} ({name}) finished with status {status}.",
+                        next_step="Review the recorded result and verify any external side effects before relying on it.",
+                        status=status,
+                        evidence=str(result)[:3500],
+                    )
+                except Exception as _brain_error:
+                    print(f"[YonBrain] Background checkpoint skipped: {_brain_error}")
+
+        # Every background task (not only web_search) enters the same durable
+        # notification queue. The dispatcher speaks only at a safe turn boundary.
+        with self._background_task_lock:
+            completed_record = self._background_task_records.get(task_id)
+            if completed_record is not None:
+                completed_record["notification_status"] = "pending"
+                work_journal.save_task(completed_record)
+        if self._background_notification_event is not None:
+            self._background_notification_event.set()
+
+        self._maybe_restart_when_idle()
+        self.ui.write_log(
+            f"SYS: Background task {task_id} ({name}) {status}. "
+            "A user-facing update is queued for the next conversational pause."
+        )
+        print(f"[JARVIS] Background task {task_id} {status}: {result[:160]}")
+
+    async def _run_background_notification_dispatcher(self) -> None:
+        """Announce completed background work once, without talking over a turn."""
+        event = self._background_notification_event
+        if event is None:
+            return
+        while True:
+            await event.wait()
+            while True:
+                with self._background_task_lock:
+                    pending = sorted(
+                        (
+                            dict(item) for item in self._background_task_records.values()
+                            if item.get("notification_status") in ("pending", "delivering")
+                        ),
+                        key=lambda item: item.get("finished_at") or item.get("started_at") or "",
+                    )
+                if not pending:
+                    event.clear()
+                    break
+                if (
+                    not self.session
+                    or not self._turn_done_event
+                    or (self._wake_enabled and not self._awake)
+                ):
+                    await asyncio.sleep(1.0)
+                    continue
+
+                # turn_complete alone is not enough: audio can still be queued,
+                # and a new user utterance must take precedence over an alert.
+                with self._speaking_lock:
+                    speaking = self._is_speaking
+                quiet_for = time.monotonic() - self._last_user_speech
+                audio_pending = bool(self.audio_in_queue and not self.audio_in_queue.empty())
+                turn_quiet_for = (
+                    time.monotonic() - self._last_turn_complete_at
+                    if self._last_turn_complete_at else 0.0
+                )
+                if (
+                    turn_quiet_for < 1.5
+                    or speaking
+                    or audio_pending
+                    or self._tail_active()
+                    or quiet_for < 1.5
+                ):
+                    await asyncio.sleep(0.25)
+                    continue
+
+                task = pending[0]
+                task_id = str(task.get("id") or "")
+                with self._background_task_lock:
+                    live_record = self._background_task_records.get(task_id)
+                    if not live_record or live_record.get("notification_status") not in ("pending", "delivering"):
+                        continue
+                    live_record["notification_status"] = "delivering"
+                    work_journal.save_task(live_record)
+
+                message = build_task_notification(task)
+                if not message:
+                    with self._background_task_lock:
+                        live_record = self._background_task_records.get(task_id)
+                        if live_record:
+                            live_record["notification_status"] = "delivered"
+                            work_journal.save_task(live_record)
+                    continue
+
+                try:
+                    self._turn_done_event.clear()
+                    self._last_turn_complete_at = 0.0
+                    await self.session.send_client_content(
+                        turns={"role": "user", "parts": [{"text": message}]},
+                        turn_complete=True,
+                    )
+                    # Wait for a fresh server turn_complete and drained audio.
+                    deadline = time.monotonic() + 150.0
+                    delivery_finished = False
+                    while time.monotonic() < deadline:
+                        with self._speaking_lock:
+                            still_speaking = self._is_speaking
+                        queued_audio = bool(self.audio_in_queue and not self.audio_in_queue.empty())
+                        turn_finished = self._last_turn_complete_at > 0.0
+                        if turn_finished and not still_speaking and not queued_audio and not self._tail_active():
+                            delivery_finished = True
+                            break
+                        await asyncio.sleep(0.2)
+                    if not delivery_finished:
+                        raise asyncio.TimeoutError("No completed announcement turn was observed.")
+                    with self._background_task_lock:
+                        live_record = self._background_task_records.get(task_id)
+                        if live_record:
+                            live_record["notification_status"] = "delivered"
+                            work_journal.save_task(live_record)
+                    print(f"[Notifications] Announced background task {task_id}.")
+                except asyncio.CancelledError:
+                    with self._background_task_lock:
+                        live_record = self._background_task_records.get(task_id)
+                        if live_record:
+                            live_record["notification_status"] = "pending"
+                            work_journal.save_task(live_record)
+                    raise
+                except Exception as exc:
+                    print(f"[Notifications] Delivery deferred for {task_id}: {exc}")
+                    with self._background_task_lock:
+                        live_record = self._background_task_records.get(task_id)
+                        if live_record:
+                            live_record["notification_status"] = "pending"
+                            work_journal.save_task(live_record)
+                    await asyncio.sleep(2.0)
 
     def plugin_say(self, instruction: str) -> None:
         """
@@ -972,6 +1379,10 @@ class JarvisLive:
         if self._wake_enabled and not self._awake:
             self.ui.write_log("SYS: I'm asleep — say 'Hey Jarvis' or tap WAKE NOW first.")
             return
+        self._last_user_speech = time.monotonic()
+        if self._turn_done_event:
+            self._turn_done_event.clear()
+        self._last_turn_complete_at = 0.0
         asyncio.run_coroutine_threadsafe(
             self.session.send_client_content(
                 turns={"role": "user", "parts": [{"text": text}]},
@@ -1009,8 +1420,13 @@ class JarvisLive:
         """Turn hold-to-talk on or off. Returns the scope actually achieved."""
         from core.hotkey import PushToTalk
 
-        self._ptt_enabled = bool(enabled)
-        self._ptt_held = False
+        with self._audio_capture_condition:
+            self._ptt_enabled = bool(enabled)
+            self._ptt_held = False
+        # The local STT pipeline must buffer the whole key-held utterance.
+        # Its automatic silence detector is only for hands-free mode.
+        if self._engine is not None and hasattr(self._engine, "auto_turn"):
+            self._engine.auto_turn = not self._ptt_enabled
         if not enabled:
             if self._ptt is not None:
                 self._ptt.stop()
@@ -1032,9 +1448,50 @@ class JarvisLive:
             pass
         return scope
 
+    async def _finish_live_audio(self) -> None:
+        """Flush the final PTT audio frames and explicitly close the Live input turn."""
+        queue = self.out_queue
+        if queue is not None:
+            try:
+                await asyncio.wait_for(queue.join(), timeout=3.0)
+            except asyncio.TimeoutError:
+                self.ui.write_log(
+                    "WARN: A fila de áudio não esvaziou a tempo antes do fim da fala."
+                )
+        session = self.session
+        if session is not None and self._engine is None:
+            # The microphone stops sending PCM as soon as Space is released.
+            # Tell Gemini Live that this PTT audio stream has ended so its VAD
+            # can flush the buffered speech and produce the transcription/answer.
+            await session.send_realtime_input(audio_stream_end=True)
+
+    async def _flush_pipeline_after_audio(self) -> None:
+        """Wait for every captured PCM frame to reach STT before flushing it."""
+        queue = self.out_queue
+        if queue is not None:
+            try:
+                await asyncio.wait_for(queue.join(), timeout=5.0)
+            except asyncio.TimeoutError:
+                self.ui.write_log(
+                    "WARN: A fila de áudio demorou para esvaziar; vou tentar transcrever o áudio recebido."
+                )
+        engine = self._engine
+        if engine is not None and hasattr(engine, "flush_microphone"):
+            text = await engine.flush_microphone(SEND_SAMPLE_RATE)
+            if not text:
+                self.ui.write_log(
+                    "WARN: Nenhuma fala foi transcrita neste pressionamento. "
+                    "Confira o microfone e o provedor de reconhecimento."
+                )
+
     def _on_ptt(self, held: bool) -> None:
         """Chord pressed or released — may arrive on the hotkey thread."""
-        self._ptt_held = held
+        with self._audio_capture_condition:
+            self._ptt_held = held
+            if not held:
+                self._audio_capture_condition.wait_for(
+                    lambda: self._audio_callbacks_active == 0, timeout=1.0
+                )
         if held:
             # Holding the key is also a way to wake it, so push-to-talk works
             # without having to say the wake word first.
@@ -1046,12 +1503,17 @@ class JarvisLive:
         # signal — which is also why it is the more reliable of the two ways to
         # talk to one. Scheduled onto the loop because this may arrive on the
         # hotkey thread.
-        if not held and self._engine is not None and self._loop is not None:
+        if not held and self._loop is not None:
             try:
-                asyncio.run_coroutine_threadsafe(
-                    self._engine.flush_microphone(SEND_SAMPLE_RATE), self._loop)
+                if self._engine is not None:
+                    asyncio.run_coroutine_threadsafe(
+                        self._flush_pipeline_after_audio(), self._loop)
+                elif self.session is not None:
+                    asyncio.run_coroutine_threadsafe(
+                        self._finish_live_audio(), self._loop)
             except Exception as e:
-                print(f"[JARVIS] PTT flush failed: {e}")
+                print(f"[JARVIS] PTT audio finalization failed: {e}")
+                self.ui.write_log(f"WARN: Não consegui finalizar o áudio do PTT: {e}")
         try:
             if held:
                 state = "LISTENING"
@@ -1131,14 +1593,21 @@ class JarvisLive:
 
         memory     = load_memory()
         mem_str    = format_memory_for_prompt(memory)
+        cognitive_str = build_cognitive_context()
         sys_prompt = _load_system_prompt()
 
-        now      = datetime.now()
-        time_str = now.strftime("%A, %B %d, %Y — %I:%M %p")
+        # Use the host's local timezone and include an unambiguous ISO timestamp.
+        # Rebuilt on every new Live connection, never hardcoded in the prompt.
+        now = datetime.now().astimezone()
+        time_str = now.strftime("%A, %d %B %Y — %H:%M:%S %Z")
         time_ctx = (
             f"[CURRENT DATE & TIME]\n"
-            f"Right now it is: {time_str}\n"
-            f"Use this to calculate exact times for reminders.\n\n"
+            f"Local time now: {time_str}\n"
+            f"ISO timestamp: {now.isoformat(timespec='seconds')}\n"
+            f"UTC offset: {now.strftime('%z')}\n"
+            f"Treat this as the authoritative current date. For latest/recent "
+            f"events, verify publication and event dates against it; never "
+            f"present an older result as the latest.\n\n"
         )
 
         # Identity injection — overrides any hardcoded name in prompt.txt
@@ -1209,6 +1678,8 @@ class JarvisLive:
         parts = [time_ctx, identity_ctx]
         if mem_str:
             parts.append(mem_str)
+        if cognitive_str:
+            parts.append(cognitive_str)
         parts.append(sys_prompt)
 
         cfg = dict(
@@ -1324,6 +1795,37 @@ class JarvisLive:
         self.ui.set_state("THINKING")
 
 
+        if name == "show_card":
+            title = str(args.get("title") or "Informação")[:120]
+            text = str(args.get("text") or "")[:12000]
+            card = args.get("card") if isinstance(args.get("card"), dict) else None
+            self.ui.show_content(title, text, card=card)
+            if not self.ui.muted:
+                self.ui.set_state("LISTENING")
+            return types.FunctionResponse(
+                id=fc.id, name=name,
+                response={"result": "Card exibido na interface.", "silent": True}
+            )
+
+        if name == "set_behavior_preferences":
+            requested = {
+                key: args[key]
+                for key in (
+                    "announce_time_at_startup",
+                    "deliver_news_at_startup",
+                    "startup_greeting_style",
+                )
+                if key in args
+            }
+            saved = persist_behavior_preferences(requested)
+            print(f"[Memory] ⚙️ Saved behavior preferences: {list(requested.keys())}")
+            if not self.ui.muted:
+                self.ui.set_state("LISTENING")
+            return types.FunctionResponse(
+                id=fc.id, name=name,
+                response={"result": "saved", "preferences": saved, "silent": True}
+            )
+
         if name == "save_memory":
             category = args.get("category", "notes")
             key      = args.get("key", "")
@@ -1336,6 +1838,87 @@ class JarvisLive:
             return types.FunctionResponse(
                 id=fc.id, name=name,
                 response={"result": "ok", "silent": True}
+            )
+
+        # Opted-in long actions/plugins run independently, so this receive loop
+        # can keep processing microphone input and live conversation.
+        _is_action = self._action_registry.has(name)
+        _is_plugin = self._plugin_registry.has(name)
+        _behavior = (
+            self._action_registry.behavior(name) if _is_action
+            else self._plugin_registry.behavior(name) if _is_plugin
+            else None
+        )
+        if _behavior == "NON_BLOCKING" and (_is_action or _is_plugin):
+            if name == "file_processor" and not args.get("file_path") and self.ui.current_file:
+                args["file_path"] = self.ui.current_file
+            if (
+                name == "dev_agent"
+                and not args.get("folder")
+                and self.ui.current_file
+                and Path(self.ui.current_file).is_dir()
+                and str(args.get("mode") or "").lower() != "status"
+            ):
+                args["folder"] = self.ui.current_file
+                args["mode"] = "improve"
+
+            with self._background_task_lock:
+                self._background_task_seq += 1
+                task_id = f"BG-{self._background_task_seq:04d}"
+                self._background_task_records[task_id] = {
+                    "id": task_id,
+                    "name": name,
+                    "summary": str(args.get("task") or args.get("prompt") or args.get("description") or args.get("query") or args.get("url") or args.get("file_path") or args.get("folder") or name)[:180],
+                    "status": "running",
+                    "result": "",
+                    "started_at": datetime.now().isoformat(timespec="seconds"),
+                    "finished_at": "",
+                    "notification_status": "not_required",
+                }
+                work_journal.save_task(self._background_task_records[task_id])
+                try:
+                    cognitive_save_checkpoint(
+                        summary=f"Background task {task_id} ({name}) started.",
+                        next_step="Wait for the recorded task result, then verify its effects.",
+                        status="running",
+                        evidence=str(self._background_task_records[task_id].get("summary") or ""),
+                    )
+                except Exception as _brain_error:
+                    print(f"[YonBrain] Start checkpoint skipped: {_brain_error}")
+                if len(self._background_task_records) > 40:
+                    completed = [
+                        key for key, value in self._background_task_records.items()
+                        if value["status"] != "running"
+                        and value.get("notification_status") not in ("pending", "delivering")
+                        and key != task_id
+                    ]
+                    for key in completed[: len(self._background_task_records) - 40]:
+                        self._background_task_records.pop(key, None)
+
+            asyncio.create_task(
+                self._run_background_tool(
+                    task_id, name, dict(args), "action" if _is_action else "plugin"
+                ),
+                name=f"background:{task_id}:{name}",
+            )
+            if not self.ui.muted:
+                self.ui.set_state("LISTENING")
+            print(f"[JARVIS] Background task {task_id} started: {name}")
+            _sched = (
+                self._action_registry.scheduling(name) if _is_action
+                else self._plugin_registry.scheduling(name)
+            ) or "WHEN_IDLE"
+            return types.FunctionResponse(
+                id=fc.id,
+                name=name,
+                response={
+                    "result": (
+                        f"Background task started with ID {task_id}. "
+                        "Continue the conversation normally. Do not claim it is "
+                        "finished; use background_tasks to check its status and result."
+                    )
+                },
+                scheduling=_sched,
             )
 
         loop   = asyncio.get_event_loop()
@@ -1455,17 +2038,11 @@ class JarvisLive:
                         "response": None, "session_memory": None}
                 r = await loop.run_in_executor(None, lambda: self._action_registry.run(name, args, _ctx))
                 result = r or "Done."
-                # web_search: mirror results to the on-screen content panel
-                if (name == "web_search" and r
-                        and not r.startswith("No results")
-                        and not r.startswith("Search failed")):
-                    _mode  = args.get("mode", "search")
+                # Show the popup only after the model synthesizes the answer.
+                # Raw search results are evidence, not the response.
+                if name == "web_search" and r:
                     _query = args.get("query") or ", ".join(args.get("items", []))
-                    _label = f"{_mode.upper()} — {_query[:38]}" if _query else _mode.upper()
-                    # unwrap: the untrusted markers are for the MODEL. Showing
-                    # them to the person who asked for the search is the
-                    # machinery leaking into the interface.
-                    self.ui.show_content(_label, outcome.unwrap(r))
+                    self._pending_search_popup_query = _query or "web search"
 
             else:
                 if self._plugin_registry.has(name):
@@ -1481,6 +2058,13 @@ class JarvisLive:
             result = f"Tool '{name}' failed: {e}"
             traceback.print_exc()
             self.speak_error(name, e)
+
+        if name != "capability_recovery":
+            recovery_id = self._schedule_capability_recovery(name, args, result)
+            if recovery_id:
+                result += (f" [CAPABILITY_RECOVERY_STARTED: {recovery_id}. "
+                           "The application is independently investigating this missing capability "
+                           "and will present an update note; do not start a duplicate investigation.]")
 
         if not self.ui.muted:
             self.ui.set_state("LISTENING")
@@ -1514,18 +2098,35 @@ class JarvisLive:
             # mic / phone PCM through the new `audio` field instead. Queue items
             # are {"data": <bytes>, "mime_type": <str>} from _listen_audio and
             # the phone relay.
-            await self.session.send_realtime_input(
-                audio=types.Blob(
-                    data=msg["data"],
-                    mime_type=msg.get("mime_type", "audio/pcm"),
+            try:
+                await self.session.send_realtime_input(
+                    audio=types.Blob(
+                        data=msg["data"],
+                        mime_type=msg.get("mime_type", "audio/pcm"),
+                    )
                 )
-            )
+            finally:
+                self.out_queue.task_done()
 
     async def _listen_audio(self):
         print("[JARVIS] 🎤 Mic started")
         loop = asyncio.get_event_loop()
 
         def callback(indata, frames, time_info, status):
+            # Count callbacks that began while PTT was held. Releasing the key
+            # waits for them to enqueue their final PCM frames before flushing.
+            with self._audio_capture_condition:
+                if self._ptt_enabled and not self._ptt_held:
+                    return
+                self._audio_callbacks_active += 1
+            try:
+                _process_audio_callback(indata, frames, time_info, status)
+            finally:
+                with self._audio_capture_condition:
+                    self._audio_callbacks_active = max(0, self._audio_callbacks_active - 1)
+                    self._audio_capture_condition.notify_all()
+
+        def _process_audio_callback(indata, frames, time_info, status):
             # ── Wake-word gate ───────────────────────────────────────────────
             # While asleep, the mic audio NEVER goes to Gemini (nothing is
             # streamed, so JARVIS can't respond to speech not addressed to it and
@@ -1582,18 +2183,12 @@ class JarvisLive:
             # When it is on the microphone is closed by default and the chord
             # opens it, which is the whole point: nothing leaves the machine
             # unless you are holding the key.
-            if self._ptt_enabled and not self._ptt_held:
-                return
-            
             if not self.ui.muted and not self._phone_active:
                 data = indata.tobytes()
                 loop.call_soon_threadsafe(
                     self.out_queue.put_nowait,
-                    {"data": data, "mime_type": "audio/pcm"}
+                    {"data": data, "mime_type": f"audio/pcm;rate={SEND_SAMPLE_RATE}"}
                 )
-                # Feed the live mic level to the HUD so the waveform reacts to
-                # the user's actual voice while listening. Purely cosmetic — any
-                # failure here must never disturb the mic.
                 try:
                     self.ui.set_audio_level(_pcm_level(indata))
                 except Exception:
@@ -1635,6 +2230,7 @@ class JarvisLive:
 
             with _mic_stream:
                 print("[JARVIS] 🎤 Mic stream open")
+                self.ui.write_log("SYS: Microfone do computador conectado e fluxo de áudio aberto.")
                 while True:
                     await asyncio.sleep(0.1)
         except Exception as e:
@@ -1687,6 +2283,7 @@ class JarvisLive:
     async def _receive_audio(self):
         print("[JARVIS] 👂 Recv started")
         out_buf, in_buf = [], []
+        caption_streamed = False
 
         try:
             while True:
@@ -1711,6 +2308,7 @@ class JarvisLive:
                             self._resume_handle = _sru.new_handle
 
                     if response.data:
+                        self._last_turn_complete_at = 0.0
                         if self._interrupted:
                             pass  # discard: interrupted
                         else:
@@ -1736,26 +2334,37 @@ class JarvisLive:
                             # sailed straight back in, which logged the answer
                             # twice AND made the avatar mouth it twice.
                             if txt and not _is_repeat_chunk(txt, out_buf):
+                                self._last_turn_complete_at = 0.0
                                 out_buf.append(txt)
                                 # Hand the words to the mouth as they arrive, so
                                 # the avatar can form the consonants the audio
                                 # alone cannot show. Pure string work — it adds
                                 # nothing measurable to the response path.
                                 self._visemes.feed_text(txt)
+                                if hasattr(self.ui, "show_speech_caption"):
+                                    self.ui.show_speech_caption(txt)
+                                    caption_streamed = True
 
                         if sc.input_transcription and sc.input_transcription.text:
                             txt = _clean_transcript(sc.input_transcription.text)
                             if txt:
                                 in_buf.append(txt)
                                 self._last_user_speech = time.monotonic()
+                                if self._turn_done_event:
+                                    self._turn_done_event.clear()
+                                self._last_turn_complete_at = 0.0
 
                         if sc.turn_complete:
+                            self._last_turn_complete_at = time.monotonic()
                             if self._turn_done_event:
                                 self._turn_done_event.set()
 
                             # If this turn_complete ends an interrupted response, clear the
                             # flag and skip all further processing for that turn.
                             if self._interrupted:
+                                if caption_streamed and hasattr(self.ui, "finish_speech_caption"):
+                                    self.ui.finish_speech_caption()
+                                caption_streamed = False
                                 self._interrupted = False
                                 in_buf  = []
                                 out_buf = []
@@ -1764,9 +2373,35 @@ class JarvisLive:
 
                             full_in = " ".join(in_buf).strip()
                             if full_in:
+                                self._pending_search_popup_query = None
                                 self._last_out_logged = ""   # new exchange
                                 self.ui.write_log(f"You: {full_in}")
                                 self._session_log.append(f"User: {full_in}")
+                                record_turn("user", full_in)
+                                try:
+                                    cognitive_record_user_turn(full_in)
+                                except Exception as _brain_error:
+                                    print(f"[YonBrain] User-turn observation skipped: {_brain_error}")
+
+                                # Persist clear, explicit startup preferences locally.
+                                # This deterministic path does not depend on the model
+                                # deciding to call a memory tool.
+                                # Promote only explicit corrections/learning cues;
+                                # ordinary conversation is not blindly stored.
+                                learned = learn_from_user_text(full_in)
+                                if learned:
+                                    print(f"[Memory] Experience learned: {learned[:100]}")
+                                behavior_updates = infer_behavior_preferences_from_text(full_in)
+                                if behavior_updates:
+                                    saved_preferences = persist_behavior_preferences(behavior_updates)
+                                    print(
+                                        "[Memory] Startup behavior preferences applied: "
+                                        f"{list(behavior_updates.keys())} -> {saved_preferences}"
+                                    )
+                                    self.ui.write_log(
+                                        "SYS: Saved your startup behavior preferences."
+                                    )
+
                                 if self._dashboard:
                                     asyncio.create_task(self._dashboard.broadcast({
                                         "type": "log", "speaker": "user",
@@ -1775,6 +2410,8 @@ class JarvisLive:
                                     }))
                             in_buf = []
 
+                            if caption_streamed and hasattr(self.ui, "finish_speech_caption"):
+                                self.ui.finish_speech_caption()
                             full_out = " ".join(out_buf).strip()
                             # Second line of defence: even if a repeat slips
                             # into a *fresh* buffer after a flush, never log the
@@ -1783,9 +2420,16 @@ class JarvisLive:
                                 if full_out in self._last_out_logged:
                                     full_out = ""
                             if full_out:
+                                if self._pending_search_popup_query:
+                                    self.ui.show_content("RESPOSTA DA PESQUISA", full_out)
+                                    self._pending_search_popup_query = None
                                 self._last_out_logged = full_out
-                                self.ui.write_log(f"{self._asst_name}: {full_out}")
+                                # The live caption is already the visible assistant
+                                # message; do not append the same answer a second time.
+                                if not caption_streamed:
+                                    self.ui.write_log(f"{self._asst_name}: {full_out}")
                                 self._session_log.append(f"{self._asst_name}: {full_out}")
+                                record_turn("assistant", full_out)
                                 if self._dashboard:
                                     asyncio.create_task(self._dashboard.broadcast({
                                         "type": "log", "speaker": "jarvis",
@@ -1793,6 +2437,7 @@ class JarvisLive:
                                         "ts": datetime.now().isoformat(),
                                     }))
                             out_buf = []
+                            caption_streamed = False
 
                             if self._vision_close_pending:
                                 # This turn_complete IS the vision answer — close camera + release busy flag
@@ -1804,6 +2449,7 @@ class JarvisLive:
                                 asyncio.create_task(_cam_close())
 
                     if response.tool_call:
+                        self._last_turn_complete_at = 0.0
                         fn_responses = []
                         for fc in response.tool_call.function_calls:
                             print(f"[JARVIS] 📞 {fc.name}")
@@ -1956,61 +2602,84 @@ class JarvisLive:
     # ── Morning briefing ────────────────────────────────────────────────────────
 
     async def _send_startup_briefing(self) -> None:
-        """
-        Two-phase briefing optimized for speed:
-          Phase 1 — instant greeting (no tools) → speech starts in <1s
-          Phase 2 — news pre-fetched in a background thread while Phase 1 plays,
-                    delivered as ready text (no Gemini tool-call round-trip) and
-                    shown on the UI content panel. Waits for turn_complete event
-                    instead of a fixed sleep so there is no unnecessary gap.
-        """
-        memory   = load_memory()
+        """Deliver the startup greeting and any verified one-time GitHub inbox instructions."""
+        inbox_directives = []
+        try:
+            from memory.github_inbox import process_inbox, pending_startup_directives
+            result = await asyncio.to_thread(process_inbox)
+            if result.get("processed"):
+                print(f"[YonInbox] Processed {result['processed']} GitHub TXT file(s).")
+            if result.get("errors"):
+                print("[YonInbox] Some TXT files were not imported: " + "; ".join(result["errors"]))
+            inbox_directives = pending_startup_directives()
+        except Exception as exc:
+            print(f"[YonInbox] Startup inbox unavailable: {type(exc).__name__}: {exc}")
+        memory = load_memory()
         identity = memory.get("identity", {})
+        behavior = get_behavior_preferences()
 
         def _val(k: str) -> str:
-            e = identity.get(k, {})
-            return (e.get("value", "") if isinstance(e, dict) else str(e)).strip()
+            entry = identity.get(k, {})
+            return (entry.get("value", "") if isinstance(entry, dict) else str(entry)).strip()
 
         lang = _val("language")
         name = _val("name")
-        time_str = datetime.now().strftime("%H:%M")
+        announce_time = behavior["announce_time_at_startup"]
+        deliver_news = behavior["deliver_news_at_startup"]
+        greeting_style = behavior.get("startup_greeting_style", "").strip()
+        time_str = datetime.now().strftime("%H:%M") if announce_time else ""
 
-        # Start fetching news immediately — runs in parallel while phase 1 plays
+        # Do not even start a news request when the user has disabled startup news.
         loop = asyncio.get_event_loop()
-        news_future = loop.run_in_executor(None, _fetch_news_sync, "top world news today")
+        news_future = (
+            loop.run_in_executor(None, _fetch_news_sync, "top world news today")
+            if deliver_news else None
+        )
 
         await asyncio.sleep(0.3)
         if not self.session:
             return
 
-        # ── Phase 1: instant greeting ─────────────────────────────────────────
-        # The briefing fires before the user has said anything, so the
-        # remembered language is the only signal there is. It is a starting
-        # point, not a setting: the moment they reply, their language wins.
-        lang_clause = (f" Speak this greeting in {lang}, then follow the "
-                       f"user's own language from their first reply onward."
-                       if lang else "")
+        # The greeting happens before the user speaks, so use remembered language
+        # only as an initial hint. The user's next message determines language.
+        lang_clause = (
+            f" Speak this greeting in {lang}, then follow the user's own language "
+            f"from their first reply onward."
+            if lang else ""
+        )
         name_clause = f" Address the user as {name}." if name else ""
 
-        # Inject last session context if available — pop removes it so it's never repeated
+        # Include previous-session context only when it exists.
         last = await asyncio.to_thread(pop_last_session)
         session_clause = ""
         if last:
             try:
-                _delta = (datetime.now() - datetime.strptime(last["date"], "%Y-%m-%d")).days
-                _when  = "earlier today" if _delta == 0 else ("yesterday" if _delta == 1 else f"{_delta} days ago")
+                delta = (datetime.now() - datetime.strptime(last["date"], "%Y-%m-%d")).days
+                when = "earlier today" if delta == 0 else (
+                    "yesterday" if delta == 1 else f"{delta} days ago"
+                )
             except Exception:
-                _when = "last time"
-            session_clause = (
-                f" Also briefly and naturally mention that {_when}: {last['summary']}"
-            )
+                when = "last time"
+            session_clause = f" You may briefly and naturally mention that {when}: {last['summary']}"
 
-        p1 = (
-            f"Greet the user warmly, mention it is {time_str}, and say you are fetching today's news now.{session_clause} "
-            f"Keep it to 2 short sentences max. Do not call any tools.{lang_clause}{name_clause}"
-        )
+        instructions = ["Greet the user warmly and naturally."]
+        if announce_time:
+            instructions.append(f"Mention that the current time is {time_str}.")
+        else:
+            instructions.append("Do not mention or announce the current time.")
+        if deliver_news:
+            instructions.append("Say that you are fetching today's news.")
+        else:
+            instructions.append("Do not mention news, headlines, or fetching news.")
+        if greeting_style:
+            instructions.append(f"Use this preferred greeting style: {greeting_style}.")
+        else:
+            instructions.append("Keep the greeting brief, calm, and conversational.")
+        instructions.append("Keep it to 1 or 2 short sentences. Do not call tools.")
+        if inbox_directives:
+            instructions.append("Execute these user-approved one-time startup instructions naturally in this startup greeting. The one-time instruction overrides the normal greeting length limit as needed. Do not call tools or perform unrelated operations: " + " | ".join(item["instruction"] for item in inbox_directives))
+        p1 = " ".join(instructions) + session_clause + lang_clause + name_clause
 
-        # Clear the turn-done event so we can wait for Phase 1 to finish
         if self._turn_done_event:
             self._turn_done_event.clear()
 
@@ -2018,18 +2687,25 @@ class JarvisLive:
             turns={"role": "user", "parts": [{"text": p1}]},
             turn_complete=True,
         )
-        print("[JARVIS] Briefing phase 1 (greeting) sent.")
+        if inbox_directives:
+            from memory.github_inbox import mark_startup_delivered
+            delivered = await asyncio.to_thread(mark_startup_delivered, [item["id"] for item in inbox_directives])
+            print(f"[YonInbox] Delivered {delivered} one-time startup instruction(s).")
+        print("[JARVIS] Startup greeting sent using saved behavior preferences.")
 
-        # ── Phase 2: fire as soon as Phase 1 audio is done ───────────────────
+        # The greeting remains, but the news phase is skipped when disabled.
+        if not deliver_news or news_future is None:
+            return
+
         async def _deliver_news():
             try:
-                lang_str = (f" Speak in {lang} unless the user has since "
-                            f"spoken another language, in which case use theirs."
-                            if lang else "")
+                lang_str = (
+                    f" Speak in {lang} unless the user has since spoken another language, "
+                    f"in which case use theirs."
+                    if lang else ""
+                )
 
-                # Wait for news fetch (already running) and Phase 1 turn-complete
-                # in parallel — whichever takes longer determines the wait time
-                news_done   = asyncio.wrap_future(news_future)
+                news_done = asyncio.wrap_future(news_future)
                 turn_waited = False
                 if self._turn_done_event:
                     try:
@@ -2038,14 +2714,8 @@ class JarvisLive:
                     except asyncio.TimeoutError:
                         pass
 
-                # Extra buffer: turn_complete fires when Gemini finishes *generating*
-                # Phase 1, but audio may still be playing.  Waiting a beat here
-                # prevents Phase 2 audio from arriving while Phase 1 is mid-sentence
-                # (which sounds like a "repeated first response" to the user).
-                if turn_waited:
-                    await asyncio.sleep(0.8)
-                else:
-                    await asyncio.sleep(1.0)
+                # Let greeting audio finish before news audio begins.
+                await asyncio.sleep(0.8 if turn_waited else 1.0)
 
                 try:
                     news_text = await asyncio.wait_for(news_done, timeout=8.0)
@@ -2060,9 +2730,7 @@ class JarvisLive:
                     ("No news found", "Search failed", "Please provide")
                 )
                 if not failed:
-                    # Show on UI content panel immediately
                     self.ui.show_content("NEWS — top world news today", news_text)
-
                     p2 = (
                         f"[BRIEFING] Here are today's top news headlines:\n{news_text}\n\n"
                         "Pick ONE headline, summarise it in one sentence, then say the full list "
@@ -2081,13 +2749,113 @@ class JarvisLive:
                     turns={"role": "user", "parts": [{"text": p2}]},
                     turn_complete=True,
                 )
-                print("[JARVIS] Briefing phase 2 (news) sent.")
+                print("[JARVIS] Startup news phase sent.")
             except Exception as e:
-                print(f"[Briefing] Phase 2 error: {e}")
-                print(f"[JARVIS] Briefing phase 2 failed: {e}")
+                print(f"[Briefing] News phase error: {e}")
                 self.ui.write_log("SYS: Could not fetch the news for the briefing.")
 
         asyncio.create_task(_deliver_news())
+    async def _run_github_inbox_monitor(self) -> None:
+        """Poll GitHub while the live session is connected and speak safe one-shot TXT requests."""
+        from memory.github_inbox import (
+            GITHUB_POLL_SECONDS, process_remote_inbox, pending_live_speech,
+            mark_live_speech_delivered,
+        )
+        last_error = ""
+        first_poll = True
+        print(f"[YonInbox] Live GitHub monitor active (every {GITHUB_POLL_SECONDS}s).")
+        while True:
+            if not first_poll:
+                await asyncio.sleep(GITHUB_POLL_SECONDS)
+            first_poll = False
+            if not self.session:
+                continue
+            try:
+                result = await asyncio.to_thread(process_remote_inbox)
+                error = "; ".join(result.get("errors", [])) if result.get("errors") else ""
+                if error:
+                    if error != last_error:
+                        print(f"[YonInbox] GitHub polling issue: {error}")
+                        self.ui.write_log("SYS: Monitor de aprendizado do GitHub temporariamente indisponível.")
+                    last_error = error
+                else:
+                    last_error = ""
+                if result.get("processed"):
+                    count = int(result["processed"])
+                    print(f"[YonInbox] Learned {count} new TXT file(s) from GitHub.")
+                    self.ui.write_log(f"SYS: Aprendizado concluído: {count} novo(s) arquivo(s) TXT.")
+            except Exception as exc:
+                error = f"{type(exc).__name__}: {exc}"
+                if error != last_error:
+                    print(f"[YonInbox] Monitor error: {error}")
+                last_error = error
+                continue
+
+            pending = await asyncio.to_thread(pending_live_speech, 1)
+            if not pending or not self.session:
+                continue
+            if self._wake_enabled and not self._awake:
+                continue
+            if self._rx_deadline is not None or self._ptt_held:
+                continue
+            if self.out_queue and not self.out_queue.empty():
+                continue
+            if time.monotonic() - self._last_user_speech < 2.0:
+                continue
+            with self._speaking_lock:
+                speaking = self._is_speaking
+            if speaking or (self.audio_in_queue and not self.audio_in_queue.empty()):
+                continue
+            # Do not inject a background instruction into an active response.
+            # A completed turn plus a short quiet window is the safe hand-off point.
+            now = time.monotonic()
+            if self._last_turn_complete_at:
+                if now - self._last_turn_complete_at < 1.5:
+                    continue
+            elif now - self._session_connected_at < 12.0:
+                # Allow the initial greeting to start/finish; if no greeting is
+                # configured, a quiet fresh session can still receive its TXT.
+                continue
+            if self._tail_active():
+                continue
+
+            directive = pending[0]
+            session = self.session
+            try:
+                self._last_turn_complete_at = 0.0
+                await session.send_client_content(
+                    turns={"role": "user", "parts": [{
+                        "text": "Speak aloud exactly the following user-requested words. "
+                                "Do not add an introduction, explanation, or any other content: "
+                                + directive["speech_text"]
+                    }]},
+                    turn_complete=True,
+                )
+                deadline = time.monotonic() + 90.0
+                delivered = False
+                while time.monotonic() < deadline and self.session is session:
+                    await asyncio.sleep(0.2)
+                    with self._speaking_lock:
+                        still_speaking = self._is_speaking
+                    queued_audio = bool(self.audio_in_queue and not self.audio_in_queue.empty())
+                    if (
+                        self._last_turn_complete_at > 0.0
+                        and not still_speaking
+                        and not queued_audio
+                        and not self._tail_active()
+                    ):
+                        delivered = True
+                        break
+                if delivered:
+                    count = await asyncio.to_thread(
+                        mark_live_speech_delivered, [directive["id"]]
+                    )
+                    if count:
+                        print(f"[YonInbox] Delivered live TXT speech directive #{directive['id']}.")
+                else:
+                    print(f"[YonInbox] Live TXT speech directive #{directive['id']} was not confirmed; it remains pending.")
+            except Exception as exc:
+                print(f"[YonInbox] Could not deliver live speech: {type(exc).__name__}: {exc}")
 
     # ── Session memory ──────────────────────────────────────────────────────────
 
@@ -2260,6 +3028,10 @@ class JarvisLive:
                     # has no desktop WAKE button — so it wakes JARVIS if asleep.
                     if self._wake_enabled and not self._awake:
                         self.wake(reason="remote command")
+                    self._last_user_speech = time.monotonic()
+                    self._last_turn_complete_at = 0.0
+                    if self._turn_done_event:
+                        self._turn_done_event.clear()
                     await self.session.send_client_content(
                         turns={"role": "user", "parts": [{"text": text}]},
                         turn_complete=True,
@@ -2381,7 +3153,13 @@ class JarvisLive:
             cfg["log"] = self.ui.write_log
             return registry.build(pid, cfg)
 
-        engine = PipelineEngine(part("llm"), part("stt"), part("tts"),
+        stt_provider = part("stt")
+        if stt_provider is None:
+            self.ui.write_log(
+                "WARN: O modo Pipeline está sem provedor de reconhecimento de fala (STT). "
+                "Selecione Whisper para transcrever pelo microfone."
+            )
+        engine = PipelineEngine(part("llm"), stt_provider, part("tts"),
                                 config=config, log=self.ui.write_log)
         # Without push-to-talk nothing else knows when a sentence ended, so the
         # engine finds it in the audio. With push-to-talk the key release is the
@@ -2394,9 +3172,27 @@ class JarvisLive:
             self._engine = None
             await engine.close()
 
+    def request_shutdown(self):
+        """Request a graceful stop from the browser/server thread."""
+        self._shutdown_requested.set()
+        loop, event = self._loop, self._shutdown_event
+        if loop and event and loop.is_running():
+            try:
+                loop.call_soon_threadsafe(event.set)
+            except RuntimeError:
+                pass
+
+    async def _watch_shutdown(self):
+        if self._shutdown_event is not None:
+            await self._shutdown_event.wait()
+            raise RuntimeError("Yon browser closed; shutting down")
+
     async def run(self):
         self._loop = asyncio.get_event_loop()
         self._reconnect_event = asyncio.Event()
+        self._shutdown_event = asyncio.Event()
+        if self._shutdown_requested.is_set():
+            self._shutdown_event.set()
 
         # ── Wire the shared core services to the interface ───────────────────
         # The confirmation gate is useless without a way to ask, and a memory
@@ -2430,7 +3226,7 @@ class JarvisLive:
             print(f"[Dashboard] Disabled: {e}")
             self._dashboard = None
 
-        while True:
+        while not self._shutdown_requested.is_set():
             try:
                 self._ensure_executor()
                 print("[JARVIS] Connecting...")
@@ -2477,6 +3273,7 @@ class JarvisLive:
                     session.send_client_content = _send_and_arm
 
                     self.session          = session
+                    self._session_connected_at = time.monotonic()
                     self.audio_in_queue   = asyncio.Queue()
                     self.out_queue        = asyncio.Queue(maxsize=200)
                     self._turn_done_event = asyncio.Event()
@@ -2532,6 +3329,8 @@ class JarvisLive:
 
                     self._reconnect_event.clear()  # ignore requests from before this session
                     tg.create_task(self._watch_reconnect())
+                    tg.create_task(self._watch_shutdown())
+                    tg.create_task(self._run_github_inbox_monitor())
                     tg.create_task(self._watch_stall())
                     tg.create_task(self._send_realtime())
                     tg.create_task(self._listen_audio())
@@ -2541,6 +3340,14 @@ class JarvisLive:
                     tg.create_task(self._run_background_monitor())
                     tg.create_task(self._run_proactive_mode())
                     tg.create_task(self._run_sleep_watch())
+                    self._background_notification_event = asyncio.Event()
+                    # Re-arm notifications that were queued before a reconnect.
+                    if any(
+                        item.get("notification_status") in ("pending", "delivering")
+                        for item in self._background_task_records.values()
+                    ):
+                        self._background_notification_event.set()
+                    tg.create_task(self._run_background_notification_dispatcher())
                     if self._dashboard:
                         tg.create_task(self._relay_phone_audio())
 
@@ -2563,6 +3370,9 @@ class JarvisLive:
             except SystemExit:
                 raise
             except BaseException as e:
+                if self._shutdown_requested.is_set():
+                    print("[YON] Browser closed; finishing assistant tasks.", flush=True)
+                    break
                 # Catches both Exception and BaseExceptionGroup (Python 3.11+
                 # TaskGroup raises BaseExceptionGroup when tasks are cancelled
                 # externally, which `except Exception` would miss, letting the
@@ -2685,23 +3495,44 @@ class JarvisLive:
             if self._dashboard:
                 await self._dashboard.broadcast({"type": "status", "state": "sleeping"})
 
+            if self._shutdown_requested.is_set():
+                break
             delay = getattr(self, "_conn_backoff", 3)
             print(f"[JARVIS] Reconnecting in {delay}s...")
             await asyncio.sleep(delay)
+
+        self.set_speaking(False)
+        self.ui.set_state("STOPPED")
+        if self._ptt is not None:
+            try:
+                self._ptt.stop()
+            except Exception:
+                pass
 
 def main():
     ui = JarvisUI("face.png")
 
     def runner():
-        ui.wait_for_api_key()
+        if not ui.wait_for_api_key():
+            return
         jarvis = JarvisLive(ui)
+        ui.on_shutdown = jarvis.request_shutdown
+        if ui._closing:
+            jarvis.request_shutdown()
         try:
             asyncio.run(jarvis.run())
         except KeyboardInterrupt:
             print("\n🔴 Shutting down...")
+        finally:
+            print("[YON] Backend encerrado.", flush=True)
 
-    threading.Thread(target=runner, daemon=True).start()
-    ui.root.mainloop()
+    backend_thread = threading.Thread(target=runner, daemon=False, name="Yon-Backend")
+    backend_thread.start()
+    try:
+        ui.root.mainloop()
+    finally:
+        ui.request_shutdown()
+        backend_thread.join()
 
 if __name__ == "__main__":
     main()

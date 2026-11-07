@@ -1,5 +1,6 @@
 import json
 import re
+import unicodedata
 from datetime import datetime
 from threading import Lock
 from pathlib import Path
@@ -477,3 +478,84 @@ def pop_last_session() -> dict | None:
         except Exception as e:
             print(f"[Memory] ⚠️ pop_last_session error: {e}")
             return None
+# ── Persistent behavior preferences ─────────────────────────────────────────
+
+_BEHAVIOR_BOOLEAN_DEFAULTS = {
+    # Preserve the original MARK LVI behavior until the user changes it.
+    "announce_time_at_startup": True,
+    "deliver_news_at_startup": True,
+}
+
+
+def get_behavior_preferences() -> dict:
+    """Return persisted behavior preferences with safe defaults."""
+    stored = (load_memory().get("preferences", {}) or {})
+    result = {}
+    for key, default in _BEHAVIOR_BOOLEAN_DEFAULTS.items():
+        raw = _entry_value(stored.get(key, "")).lower()
+        if not raw:
+            result[key] = default
+        else:
+            result[key] = raw in {"1", "true", "yes", "on", "enabled"}
+    style = _entry_value(stored.get("startup_greeting_style", ""))
+    if style:
+        result["startup_greeting_style"] = style
+    return result
+
+
+def set_behavior_preferences(preferences: dict) -> dict:
+    """Persist only supported standing behavior preferences."""
+    if not isinstance(preferences, dict):
+        return get_behavior_preferences()
+
+    updates = {}
+    for key in _BEHAVIOR_BOOLEAN_DEFAULTS:
+        value = preferences.get(key)
+        if isinstance(value, bool):
+            updates[key] = {"value": "enabled" if value else "disabled"}
+
+    style = preferences.get("startup_greeting_style")
+    if isinstance(style, str):
+        style = style.strip()
+        if style:
+            updates["startup_greeting_style"] = {"value": style[:160]}
+
+    if updates:
+        update_memory({"preferences": updates})
+    return get_behavior_preferences()
+
+def infer_behavior_preferences_from_text(text: str) -> dict:
+    """Recognize explicit startup-preference instructions without relying on the LLM."""
+    raw = unicodedata.normalize("NFKD", str(text or "").lower())
+    normalized = "".join(ch for ch in raw if not unicodedata.combining(ch))
+
+    startup_markers = (
+        "ao abrir", "quando abrir", "ao iniciar", "quando iniciar",
+        "na inicializacao", "toda vez que abrir", "sempre que abrir",
+        "quando eu abrir", "ao ligar", "no inicio", "startup",
+    )
+    if not any(marker in normalized for marker in startup_markers):
+        return {}
+
+    negative_markers = (
+        "nao quero", "nao gostaria", "nao precisa", "nao anuncie",
+        "nao fale", "nao diga", "nao mostre", "sem ", "pare de", "evite",
+    )
+    negative = any(marker in normalized for marker in negative_markers)
+    updates = {}
+
+    time_terms = ("hora", "horario", "horas", "que horas")
+    news_terms = ("noticia", "noticias", "manchete", "manchetes", "noticiario", "jornal")
+
+    if negative and any(term in normalized for term in time_terms):
+        updates["announce_time_at_startup"] = False
+    if negative and any(term in normalized for term in news_terms):
+        updates["deliver_news_at_startup"] = False
+
+    greeting_terms = ("saudacao", "cumprimento", "me receba", "me receber")
+    style_terms = ("suave", "tranquila", "tranquilo", "calma", "calmo", "breve", "curta", "curto", "natural")
+    if (any(term in normalized for term in greeting_terms)
+            and any(term in normalized for term in style_terms)):
+        updates["startup_greeting_style"] = "brief, calm and natural"
+
+    return updates

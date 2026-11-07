@@ -189,17 +189,10 @@ def save_thinking_enabled(enabled: bool) -> None:
 def get_turn_tuning() -> dict:
     """How eagerly the server decides you have stopped speaking.
 
-    OFF by default, and that default was earned. Cutting turns shorter looks
-    like a free speed win and is not: proactive audio has to judge whether an
-    utterance was even addressed to the assistant, and a turn clipped early
-    gives it less to judge, so it stays quiet — and the reply to your first
-    sentence only arrives once your second one has given it enough context.
-    That reads as the assistant being a turn behind, which is far worse than
-    the fraction of a second the tuning saves.
-
-    Turn it on with "turn_tuning": {"enabled": true} if your own microphone and
-    speaking pace suit it. `silence_ms` is the one that is felt: the pause the
-    server sits through before accepting your turn is over.
+    ON by default with a moderate 700 ms silence window. This helps ordinary
+    speech close a turn without cutting normal pauses too aggressively. Users
+    can override it with "turn_tuning" in api_keys.json. `silence_ms` controls
+    how long the server waits before accepting that a spoken turn is over.
     """
     cfg = load_api_keys().get("turn_tuning")
     cfg = cfg if isinstance(cfg, dict) else {}
@@ -211,8 +204,9 @@ def get_turn_tuning() -> dict:
             return default
 
     return {
-        "enabled":    bool(cfg.get("enabled", False)),
-        "silence_ms": _int("silence_ms", 550, 200, 3000),
+        # Reliable end-of-speech detection is enabled for new configurations.
+        "enabled":    bool(cfg.get("enabled", True)),
+        "silence_ms": _int("silence_ms", 700, 200, 3000),
         "prefix_ms":  _int("prefix_ms", 150, 0, 1000),
         # "high" = quicker to decide speech has ended.
         "end_sensitivity":   str(cfg.get("end_sensitivity", "high")).lower(),
@@ -236,16 +230,15 @@ def save_turn_tuning(values: dict) -> None:
 
 
 def get_proactive_audio_enabled() -> bool:
-    """Whether the model gets to decide an utterance was not aimed at it and
-    stay quiet.
+    """Whether the model may suppress speech it judges was not addressed to it.
 
-    On by default — it is what stops the assistant answering the room. But it
-    is also the first thing to switch off if replies ever seem to arrive a turn
-    late: what looks like lag is usually the model having judged your previous
-    sentence as not addressed to it, and only changing its mind once the next
-    one arrives.
+    Off by default so direct user speech is not silently suppressed. Enable
+    explicitly in api_keys.json when filtering room conversation is more
+    important than reliably answering every direct utterance.
     """
-    return bool(load_api_keys().get("proactive_audio", True))
+    # Prefer answering the user's direct speech instead of silently suppressing
+    # it when the model guesses the utterance was not addressed to the assistant.
+    return bool(load_api_keys().get("proactive_audio", False))
 
 
 def save_proactive_audio_enabled(enabled: bool) -> None:

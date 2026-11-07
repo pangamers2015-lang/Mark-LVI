@@ -7,6 +7,7 @@
 # fresh clone on the day it ships. Minor and patch updates flow in freely.
 
 # ── Core: UI, audio, Gemini Live ──────────────────────────────────────────────
+# The HTML interface is served by Python's standard-library HTTP server; no desktop webview is needed.
 # PyQt6 and numpy also carry the holographic avatar: the head is rendered in
 # software with QPainter and posed with numpy, so the face costs no extra
 # package, no OpenGL and no GPU. Nothing below was added for it.
@@ -86,9 +87,6 @@ pywinauto;  sys_platform == "win32"
 # ── Documents, media & hardware readouts ──────────────────────────────────────
 # Also try/except-guarded at the point of use. They are declared because a
 # feature that silently does nothing is worse than a slightly longer install.
-ddgs>=9,<10                  # web_search — the maintained successor to
-                             # duckduckgo-search, which is tried first and
-                             # falls back to the old name automatically
 pdfplumber                   # file_processor — PDF text and tables
 PyPDF2                       # file_processor — PDF fallback reader
 python-docx                  # file_processor — .docx reading
