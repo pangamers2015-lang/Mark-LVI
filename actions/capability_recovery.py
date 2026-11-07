@@ -119,7 +119,9 @@ def capability_recovery(parameters: dict, player=None) -> str:
     failed_tool = str(p.get("failed_tool") or "not identified").strip()[:100]
     raw_args = p.get("failed_args") if isinstance(p.get("failed_args"), dict) else {}
     safe_args = {str(k): _safe_value(k, v) for k, v in list(raw_args.items())[:30]}
-    topic = str(p.get("topic") or _topic_for(failed_tool, safe_args)).strip()[:500]
+    topic_context = dict(safe_args)
+    topic_context.update({"task": task, "limitation": limitation})
+    topic = str(p.get("topic") or _topic_for(failed_tool, topic_context)).strip()[:500]
 
     if not task or not limitation:
         return "Capability investigation requires the user's task and a concrete technical limitation."
