@@ -138,11 +138,12 @@
   .yon-popup-head { display:flex; align-items:center; justify-content:space-between; gap:12px; }
   .yon-popup-fechar { flex:0 0 auto; width:28px; height:28px; border:0; border-radius:50%; background:rgba(255,255,255,.1); color:#fff; cursor:pointer; font-size:18px; }
   .yon-popup-texto a { color:#a9d5ff; text-decoration:underline; overflow-wrap:anywhere; }
-  .yon-popup-card { display:flex; align-items:center; gap:12px; margin:0 0 14px; padding:12px; border:1px solid rgba(255,255,255,.12); border-radius:12px; background:rgba(255,255,255,.045); }
+  .yon-popup-card { display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:12px; margin:0 0 14px; padding:12px; border:1px solid rgba(255,255,255,.12); border-radius:12px; background:rgba(255,255,255,.045); }
+  .yon-popup-card[hidden] { display:none; }
+  .yon-card-meta { grid-column:1 / -1; color:rgba(255,255,255,.58); font-size:11px; line-height:1.5; margin-top:4px; }
   .yon-card-team { display:flex; flex:1; min-width:0; flex-direction:column; align-items:center; gap:6px; text-align:center; font-size:12px; }
   .yon-card-team img { width:42px; height:42px; object-fit:contain; }
   .yon-card-score { font-size:22px; font-weight:600; white-space:nowrap; }
-  .yon-card-meta { color:rgba(255,255,255,.58); font-size:11px; line-height:1.5; margin-top:8px; }
   @keyframes pisca { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
   @keyframes entra { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
   @media (max-width: 600px) {
