@@ -4630,6 +4630,8 @@ class MainWindow(QMainWindow):
         # Load customization from config
         _cfg = _read_full_config()
         self._assistant_name: str = (_cfg.get("assistant_name") or "ION").strip()
+        if self._assistant_name.upper() in {"JARVIS", "J.A.R.V.I.S", "YON", "MARK LVI"}:
+            self._assistant_name = "ION"
         _display = self._assistant_name.upper()
 
         # Apply the saved UI colour BEFORE panels/stylesheets are built
@@ -7376,7 +7378,7 @@ class MainWindow(QMainWindow):
     def _apply_name_update(self, name: str, user_name: str, ui_color: str = "",
                            voice: str = ""):
         """Update all name/theme-dependent UI elements and persist to config."""
-        self._assistant_name = name.strip() or "JARVIS"
+        self._assistant_name = name.strip() or "ION"
         display = self._assistant_name.upper()
         self.setWindowTitle(f"{display} — {APP_VERSION}")
         self._title_lbl.setText(display)
