@@ -483,6 +483,12 @@
       mudarEstado("ouvindo");
       diag("ptt_press", "browser space key");
     } catch (erro) {
+      // If the server accepted the press but the response was lost, release
+      // defensively so the microphone cannot remain stuck in PTT mode.
+      fetch("/api/ptt", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ held: false }), keepalive: true
+      }).catch(() => {});
       if (token === pttToken) {
         espacoPressionado = false;
         querGravar = false;
