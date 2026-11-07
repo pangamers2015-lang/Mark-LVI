@@ -129,7 +129,7 @@ document.addEventListener("visibilitychange",()=>{if(document.hidden)setPushToTa
 addEventListener("pagehide",()=>{if(pttHeld)navigator.sendBeacon("/api/voice/ptt",new Blob([JSON.stringify({held:false})],{type:"application/json"}));navigator.sendBeacon("/api/client/closing",new Blob([],{type:"application/octet-stream"}))});
 const events=new EventSource("/api/events");
 events.onmessage=e=>{try{const d=JSON.parse(e.data);
- if(d.type==="voice_state"){voiceActive=["listening","speaking","thinking"].includes(d.state);speaking=d.state==="speaking";state(d.state==="connecting"||d.state==="reconnecting"?"thinking":d.state==="speaking"?"speaking":d.state==="listening"?"listening":"idle")}
+ if(d.type==="voice_state"){voiceActive=!["stopped","reconnecting","connecting"].includes(d.state);speaking=d.state==="speaking";state(d.state==="connecting"||d.state==="reconnecting"?"thinking":d.state==="speaking"?"speaking":d.state==="listening"?"listening":"idle")}
  else if(d.type==="voice_error"){toast(d.text||"Falha na conexão de voz.");state("idle")}
  else if(d.type==="transcript"){const who=d.speaker==="user"?"user":"yon";const last=$("messages").lastElementChild;if(who==="user"&&last&&last.classList.contains("user")&&last.textContent.trim()===d.text.trim()){activeTranscript.user=last}else if(!activeTranscript[who]){activeTranscript[who]=addMessage(d.text,who)}else{activeTranscript[who].textContent+=" "+d.text;$("messages").scrollTop=$("messages").scrollHeight}lastTranscriptNode=activeTranscript[who]}
  else if(d.type==="turn_complete"){lastTranscriptNode=null;activeTranscript={user:null,yon:null}}
