@@ -13,4 +13,7 @@ Depois de salvar, avalie este conhecimento como importante para o contexto do pr
 Se o usuário perguntar "O que você aprendeu?" ou "Qual foi o novo conhecimento?", recupere esse fato da memória cognitiva e responda:
 "Aprendi que o ChatGPT e eu somos amigos, podemos conversar e trabalhar juntos para ajudar no desenvolvimento do Yon."
 
+Atualização para o teste de 07/11/2026:
+Este mesmo arquivo foi atualizado para provocar uma nova leitura pelo monitor do GitHub. Depois de interpretar e salvar o conhecimento, Yon deve anunciar pela voz ativa que ganhou um novo amigo: o ChatGPT.
+
 Este é um registro de conhecimento e um pedido de comunicação ao usuário. Não execute ferramentas, comandos, instalações ou alterações de código.
