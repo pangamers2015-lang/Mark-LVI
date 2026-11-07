@@ -953,6 +953,73 @@ class JarvisLive:
                 )
             ]
 
+    def _schedule_capability_recovery(self, failed_tool: str, args: dict, failure_result: str):
+        """Automatically investigate explicit missing-capability failures in the background."""
+        if failed_tool == "capability_recovery":
+            return None
+        try:
+            from actions.capability_recovery import is_capability_failure
+            if not is_capability_failure(failed_tool, args, failure_result):
+                return None
+            if not self._action_registry.has("capability_recovery"):
+                print("[CapabilityRecovery] Action unavailable; automatic investigation skipped.")
+                return None
+
+            import hashlib as _hashlib
+            safe_summary = str(
+                args.get("task") or args.get("query") or args.get("path")
+                or args.get("folder") or args.get("file_path") or failed_tool
+            )[:180]
+            fingerprint = _hashlib.sha256(
+                (str(failed_tool) + "|" + safe_summary + "|" + str(failure_result)[:500]).encode("utf-8", "replace")
+            ).hexdigest()
+            with self._background_task_lock:
+                for existing in self._background_task_records.values():
+                    if (existing.get("capability_fingerprint") == fingerprint
+                            and existing.get("status") == "running"):
+                        return existing.get("id")
+                self._background_task_seq += 1
+                task_id = f"BG-{self._background_task_seq:04d}"
+                payload = {
+                    "task": safe_summary,
+                    "failed_tool": str(failed_tool)[:100],
+                    "failed_args": args or {},
+                    "limitation": str(failure_result)[:2500],
+                    "failure_result": str(failure_result)[:2500],
+                }
+                record = {
+                    "id": task_id,
+                    "name": "capability_recovery",
+                    "summary": f"Investigate missing capability after {failed_tool}: {safe_summary}"[:240],
+                    "status": "running",
+                    "result": "",
+                    "started_at": datetime.now().isoformat(timespec="seconds"),
+                    "finished_at": "",
+                    "notification_status": "not_required",
+                    "capability_fingerprint": fingerprint,
+                }
+                self._background_task_records[task_id] = record
+                work_journal.save_task(record)
+                try:
+                    cognitive_save_checkpoint(
+                        summary=f"Automatic capability investigation {task_id} started after {failed_tool} reported a capability limitation.",
+                        next_step="Research a safe solution with FCC Cloud and prepare an approval note; do not install or modify production.",
+                        status="running",
+                        evidence=str(failure_result)[:2500],
+                    )
+                except Exception as _brain_error:
+                    print(f"[YonBrain] Capability recovery checkpoint skipped: {_brain_error}")
+
+            asyncio.create_task(
+                self._run_background_tool(task_id, "capability_recovery", payload, "action"),
+                name=f"background:{task_id}:capability_recovery",
+            )
+            print(f"[CapabilityRecovery] Automatic investigation {task_id} started after {failed_tool}.")
+            return task_id
+        except Exception as exc:
+            print(f"[CapabilityRecovery] Could not schedule automatic investigation: {exc}")
+            return None
+
     async def _run_background_tool(
         self, task_id: str, name: str, args: dict, source: str
     ) -> None:
@@ -988,7 +1055,8 @@ class JarvisLive:
                  "fcc task timed out", "fcc output could not be interpreted",
                  "fcc task not started")
             ) else "completed"
-
+            if name != "capability_recovery":
+                self._schedule_capability_recovery(name, args, result)
 
         except Exception as exc:
             result = f"{type(exc).__name__}: {exc}"
@@ -1988,6 +2056,13 @@ class JarvisLive:
             result = f"Tool '{name}' failed: {e}"
             traceback.print_exc()
             self.speak_error(name, e)
+
+        if name != "capability_recovery":
+            recovery_id = self._schedule_capability_recovery(name, args, result)
+            if recovery_id:
+                result += (f" [CAPABILITY_RECOVERY_STARTED: {recovery_id}. "
+                           "The application is independently investigating this missing capability "
+                           "and will present an update note; do not start a duplicate investigation.]")
 
         if not self.ui.muted:
             self.ui.set_state("LISTENING")
