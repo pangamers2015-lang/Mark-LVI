@@ -15,6 +15,11 @@ _MARKERS = (
     "guarde isso", "da próxima vez", "da proxima vez", "não faça novamente",
     "nao faca novamente", "o correto é", "o correto e", "that's wrong",
     "you got that wrong", "remember this", "next time", "correction:",
+    "aprenda", "aprenda que", "ensine", "quero que aprenda",
+    "guarde como procedimento", "o procedimento correto", "use este procedimento",
+    "sempre que eu pedir", "quando eu pedir", "sempre que pesquisar",
+    "quando pesquisar", "para pesquisar, faça", "para pesquisar faca",
+    "meu método é", "meu metodo e",
 )
 
 
@@ -74,7 +79,7 @@ def search_lessons(query: str = "", limit: int = 8) -> list[str]:
         return []
 
 
-def format_learning_for_prompt(limit: int = 6) -> str:
+def format_learning_for_prompt(limit: int = 10) -> str:
     lessons = search_lessons(limit=limit)
     if not lessons:
         return ""
