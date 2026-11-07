@@ -75,7 +75,7 @@ from memory.cognitive_runtime import (
 # system_status).
 from core import outcome
 from core import work_journal
-from core.background_notifications import build_task_notification
+from core.background_notifications import build_task_notification, can_deliver_notification
 from core.action_loader import strip_meta
 from actions.screen_processor  import _capture_camera, _capture_screen
 from actions.system_monitor    import SystemMonitor, get_system_status
@@ -1027,16 +1027,15 @@ class JarvisLive:
                     speaking = self._is_speaking
                 quiet_for = time.monotonic() - self._last_user_speech
                 audio_pending = bool(self.audio_in_queue and not self.audio_in_queue.empty())
-                turn_quiet_for = (
-                    time.monotonic() - self._last_turn_complete_at
-                    if self._last_turn_complete_at else 0.0
-                )
-                if (
-                    turn_quiet_for < 1.5
-                    or speaking
-                    or audio_pending
-                    or self._tail_active()
-                    or quiet_for < 1.5
+                if not can_deliver_notification(
+                    turn_complete_at=self._last_turn_complete_at,
+                    now=time.monotonic(),
+                    speaking=speaking,
+                    audio_pending=audio_pending,
+                    tail_active=self._tail_active(),
+                    user_quiet_for=quiet_for,
+                    wake_enabled=self._wake_enabled,
+                    awake=self._awake,
                 ):
                     await asyncio.sleep(0.25)
                     continue
