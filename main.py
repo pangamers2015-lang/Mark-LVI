@@ -2166,6 +2166,7 @@ class JarvisLive:
                             self._resume_handle = _sru.new_handle
 
                     if response.data:
+                        self._last_turn_complete_at = 0.0
                         if self._interrupted:
                             pass  # discard: interrupted
                         else:
@@ -2306,6 +2307,7 @@ class JarvisLive:
                                 asyncio.create_task(_cam_close())
 
                     if response.tool_call:
+                        self._last_turn_complete_at = 0.0
                         fn_responses = []
                         for fc in response.tool_call.function_calls:
                             print(f"[JARVIS] 📞 {fc.name}")
