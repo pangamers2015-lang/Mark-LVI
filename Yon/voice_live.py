@@ -161,7 +161,7 @@ class LiveVoice:
         async with client.aio.live.connect(model=LIVE_MODEL, config=config) as session:
             self._session = session
             self._connected.set()
-            self.emit({"type": "voice_state", "state": "listening"})
+            self.emit({"type": "voice_state", "state": "idle"})
             try:
                 self._open_audio()
                 tasks = [
@@ -208,7 +208,7 @@ class LiveVoice:
             if not self._pending and self._output.empty() and self._speaking.is_set() and self._turn_complete:
                 self._speaking.clear()
                 if self._loop:
-                    self._loop.call_soon_threadsafe(self.emit, {"type": "voice_state", "state": "listening"})
+                    self._loop.call_soon_threadsafe(self.emit, {"type": "voice_state", "state": "listening" if self._ptt_held.is_set() else "idle"})
 
         self._mic_callback = mic_callback
         self._speaker_stream = sd.RawOutputStream(samplerate=OUTPUT_RATE, blocksize=BLOCK, channels=1,
