@@ -1,7 +1,7 @@
 name: Yon knowledge validation
 on:
   push:
-    branches: [main, feature/behavioral-preferences, feature/continuous-knowledge-inbox, feature/bidirectional-knowledge-sync]
+    branches: [main, feature/behavioral-preferences, feature/continuous-knowledge-inbox, feature/bidirectional-knowledge-sync, feature/visual-task-panel-clean-chat]
     paths:
       - "knowledge/updates/**"
       - "knowledge/inbox/**"
@@ -13,12 +13,15 @@ on:
       - "actions/knowledge_update.py"
       - "core/prompt.txt"
       - "main.py"
+      - "web/index.html"
       - "tests/test_knowledge_updates.py"
       - "tests/test_github_inbox.py"
       - "tests/test_github_shared_sync.py"
       - ".github/workflows/knowledge-validation.yml"
   pull_request:
     paths:
+      - "main.py"
+      - "web/index.html"
       - "knowledge/updates/**"
       - "knowledge/inbox/**"
       - "memory/knowledge_updates.py"
