@@ -199,3 +199,44 @@ STATUS ATUAL
 
 REGRA FINAL
 Este documento e o registro principal de planejamento do novo Jarvis. Atualizar este mesmo arquivo com decisoes, mudancas, implementacoes, testes, resultados e pendencias. Nao criar planos paralelos. O documento nao e executavel e nao autoriza por si so qualquer implementacao.
+
+ARQUITETURA DE INTEGRACAO INDEPENDENTE DE MODELOS (DECISAO DE 07/11/2026)
+Objetivo: concluir primeiro a estrutura do Jarvis sem bloquear o planejamento pela escolha das versoes exatas dos modelos. As versoes, endpoints e configuracoes concretas serao definidas posteriormente, na etapa de integracao e validacao dos provedores.
+
+- O nucleo do Jarvis nao pode depender diretamente de um modelo, SDK, nome de modelo ou endpoint especifico.
+- Criar uma camada de adaptadores de provedores (Provider Adapters) com contrato comum para OpenAI, Gemini, FCC Cloud e Qwen.
+- Cada adaptador encapsula autenticacao, endpoint, formato de mensagens, envio/recebimento, streaming quando suportado, limites, erros, timeouts, cancelamento e metadados de uso/custo.
+- Separar o papel funcional do agente da implementacao concreta do modelo. O orquestrador solicita capacidades e seleciona um adaptador configurado; nao presume que todos os provedores oferecem as mesmas capacidades.
+- Definir contrato comum para tarefas e resultados: identificador, agente/provedor, objetivo, contexto, escopo de arquivos, restricoes, dependencias, criterios de aceite, estado, artefatos, evidencias, erros e consumo.
+- Modelos, versoes, endpoints e parametros devem ser configuraveis sem alterar o nucleo. Segredos ficam em armazenamento protegido, nunca no TXT ou no GitHub.
+- Permitir substituir ou atualizar um modelo/provedor sem reescrever o orquestrador, a memoria ou os contratos internos.
+- Na integracao, verificar conectividade, capacidades reais, compatibilidade, latencia, confiabilidade e custo. Registrar somente versoes efetivamente testadas; uma recomendacao nao significa que esteja instalada.
+- A definicao exata das versoes OpenAI, Gemini, FCC Cloud, Qwen e do auditor NAO e pre-requisito para concluir a arquitetura estrutural. Adiar essa identificacao ate a etapa de integracao dos provedores.
+
+AGENTE AUDITOR AUXILIAR
+- Registrar o MiniCPM5 2B como candidato recomendado para o papel de Agente Auditor auxiliar, ainda sujeito a confirmacao de instalacao, desempenho e qualidade no hardware real.
+- O auditor recebe a especificacao e os criterios de aceite definidos pelo cerebro central; pode resumir brevemente o entendimento para validacao antes da execucao.
+- O auditor executa testes automatizados, verificacoes estaticas e testes de integracao em ambiente de teste preparado para cada entrega; compara resultados com requisitos e evidencia resultados.
+- O relatorio ao cerebro central deve ser conciso e estruturado: requisito/teste, aprovado ou reprovado, componente responsavel, identificador do teste, evidencia e gravidade.
+- Em caso de falha, encaminhar ao agente responsavel pelo componente; apos correcao, repetir os testes pertinentes e a regressao necessaria.
+- O cerebro central decide avancar, devolver para correcao ou replanejar com base no relatorio e nas evidencias, sem revisar rotineiramente grandes volumes de codigo.
+- O auditor nao substitui os testes deterministas: compiladores, linters, testes unitarios, integracao, ponta a ponta e verificacoes de seguranca devem produzir evidencias objetivas. O modelo auxilia na interpretacao e triagem.
+- A arquitetura do auditor deve ser desacoplada do modelo para permitir substituicao futura caso o MiniCPM5 2B nao atinja qualidade ou desempenho suficientes.
+
+GERENCIADOR INTELIGENTE DE RECURSOS (REQUISITO FUNDACIONAL)
+- Monitorar continuamente RAM, CPU, GPU/VRAM, armazenamento, processos e temperaturas quando sensores e drivers disponibilizarem esses dados.
+- Identificar consumo por processo/agente/modelo e manter historico de picos e tendencias.
+- Considerar a memoria reservada pelo sistema operacional, o consumo do proprio Jarvis, memoria compartilhada da GPU e uma margem para manter o computador responsivo.
+- Antes de iniciar tarefas, estimar recursos necessarios e decidir se podem executar em paralelo, devem entrar em fila ou precisam aguardar.
+- Definir limites configuraveis e histerese: ao atingir limiares, interromper o inicio de novas tarefas pesadas, reduzir concorrencia ou pausar tarefas pausaveis; retomar gradualmente quando houver folga.
+- Aplicar limites por processo quando o sistema operacional permitir; timeout, cancelamento e encerramento controlado para agentes travados.
+- Monitorar temperatura e sinais de throttling; reduzir carga ou pausar tarefas quando limites termicos configurados forem atingidos. Nao presumir que todos os sensores estejam acessiveis.
+- Registrar alertas, acoes automaticas e motivo das decisoes. Nunca alegar temperatura ou consumo exatos sem leitura real do sensor.
+- O gerenciador deve continuar funcional mesmo se um agente ou o processo principal falhar, na medida permitida pela arquitetura do sistema operacional.
+- A linguagem de implementacao ainda nao foi escolhida; o requisito e independente de Java ou de qualquer linguagem especifica.
+
+SEQUENCIAMENTO E REGRA DE PLANEJAMENTO
+- Tratar os itens acima como requisitos estruturais da arquitetura e incorpora-los ao desenho da fundacao tecnica, nao como otimizacoes opcionais posteriores.
+- Projetar cada nova arquitetura considerando desde o inicio recursos de hardware, dependencias, observabilidade, recuperacao, versionamento, memoria, seguranca operacional e custo de modelos.
+- Nao exigir a escolha antecipada das versoes exatas dos provedores para concluir o desenho estrutural. Definir os detalhes concretos na fase de integracao e validacao.
+- Manter o cronograma em nivel de fases ate que as escolhas tecnologicas e os testes de compatibilidade permitam estimar duracoes realistas.
