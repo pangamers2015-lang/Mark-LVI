@@ -17,6 +17,16 @@ def _public_result(record: dict) -> str:
                 break
         else:
             result = ""
+    elif result.startswith("FCC execution failed:"):
+        result = "A execução falhou: " + result.partition(":")[2].strip()
+    elif result.startswith("FCC exited with code"):
+        result = "A execução terminou com erro: " + result.partition("Details:")[2].strip()
+    elif result.startswith("FCC reported an execution error:"):
+        result = "A tarefa falhou: " + result.partition(":")[2].strip()
+    elif result.startswith("FCC task timed out"):
+        result = "A tarefa excedeu o tempo limite. " + result.partition(".")[2].strip()
+    elif result.startswith("FCC output could not be interpreted:"):
+        result = "Não foi possível interpretar o resultado da tarefa: " + result.partition(":")[2].strip()
     return result[:9000]
 
 
