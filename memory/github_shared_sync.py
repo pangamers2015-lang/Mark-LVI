@@ -182,9 +182,9 @@ def sync_shared_folder(force: bool = False) -> dict:
         local = _local_files()
         remote = _remote_files()
         with store._LOCK, closing(_db()) as conn:
-                state = {row[0]: (row[1], row[2]) for row in conn.execute(
-                    "SELECT path,local_digest,remote_sha FROM github_shared_sync_state"
-                ).fetchall()}
+            state = {row[0]: (row[1], row[2]) for row in conn.execute(
+                "SELECT path,local_digest,remote_sha FROM github_shared_sync_state"
+            ).fetchall()}
 
         for relative in sorted(set(local) | set(remote)):
             local_raw = local.get(relative)
@@ -235,14 +235,14 @@ def sync_shared_folder(force: bool = False) -> dict:
                 local_digest = hashlib.sha256(local_raw).hexdigest() if local_raw else ""
             if remote_sha and local_digest:
                 with store._LOCK, closing(_db()) as conn:
-                        conn.execute(
-                            "INSERT INTO github_shared_sync_state(path,local_digest,remote_sha,synced_at) "
-                            "VALUES(?,?,?,?) ON CONFLICT(path) DO UPDATE SET "
-                            "local_digest=excluded.local_digest,remote_sha=excluded.remote_sha,"
-                            "synced_at=excluded.synced_at",
-                            (relative, local_digest, remote_sha, datetime.now(timezone.utc).isoformat()),
-                        )
-                        conn.commit()
+                    conn.execute(
+                        "INSERT INTO github_shared_sync_state(path,local_digest,remote_sha,synced_at) "
+                        "VALUES(?,?,?,?) ON CONFLICT(path) DO UPDATE SET "
+                        "local_digest=excluded.local_digest,remote_sha=excluded.remote_sha,"
+                        "synced_at=excluded.synced_at",
+                        (relative, local_digest, remote_sha, datetime.now(timezone.utc).isoformat()),
+                    )
+                    conn.commit()
 
         return {"ok": not conflicts, "uploaded": uploaded, "downloaded": downloaded,
                 "conflicts": conflicts, "folder": str(SHARED_ROOT)}
