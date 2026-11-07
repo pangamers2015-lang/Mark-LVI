@@ -59,9 +59,12 @@ def initialize():
         return False
 
 def remember(content, level="semantic", source="user", state="hypothesis", evidence=""):
+    if state == "confirmed" and not str(evidence or "").strip(): return None
     if not initialize(): return None
-    return store.add_memory(content,level=level,source=source,state=state,evidence=evidence,
-                             validated=(state=="confirmed"))
+    memory_id = store.add_memory(content,level=level,source=source,state=state,evidence=evidence,
+                                 validated=(state=="confirmed"))
+    if memory_id and _EMBEDDER is not None: index_memory(memory_id)
+    return memory_id
 
 def validate_memory(memory_id,state,evidence):
     if state=="confirmed" and not str(evidence or "").strip(): return False
@@ -283,3 +286,49 @@ def graph_summary(limit=30):
             return {"nodes":len({x for r in rows for x in r[:2]}),"edges":len(rows),
               "components":None,"note":"Install networkx for graph analytics."}
     except sqlite3.Error: return {"nodes":0,"edges":0,"components":None}
+
+
+def add_goal_dependency(goal_id, depends_on_goal_id):
+    """Add a prerequisite edge, rejecting missing goals and dependency cycles."""
+    try:
+        goal_id, depends_on_goal_id = int(goal_id), int(depends_on_goal_id)
+        if goal_id == depends_on_goal_id: return False
+        goals = {int(x["id"]) for x in store.list_goals(include_finished=True, limit=100)}
+        if goal_id not in goals or depends_on_goal_id not in goals: return False
+        with _LOCK, closing(_db()) as conn:
+            edges = conn.execute("SELECT goal_id,depends_on_goal_id FROM goal_dependencies").fetchall()
+        adjacency = {}
+        for source, target in edges: adjacency.setdefault(int(source), set()).add(int(target))
+        pending, visited = [depends_on_goal_id], set()
+        while pending:
+            current = pending.pop()
+            if current == goal_id: return False
+            if current in visited: continue
+            visited.add(current)
+            pending.extend(adjacency.get(current, ()))
+        with _LOCK, closing(_db()) as conn, conn:
+            conn.execute("INSERT OR IGNORE INTO goal_dependencies(goal_id,depends_on_goal_id,created_at) VALUES(?,?,?)",
+                         (goal_id, depends_on_goal_id, _now()))
+        return True
+    except (sqlite3.Error, TypeError, ValueError): return False
+
+def goal_dependency_map():
+    try:
+        with _LOCK, closing(_db()) as conn:
+            rows = conn.execute("SELECT goal_id,depends_on_goal_id FROM goal_dependencies").fetchall()
+        result = {}
+        for goal_id, dependency_id in rows:
+            result.setdefault(int(goal_id), []).append(int(dependency_id))
+        return result
+    except sqlite3.Error: return {}
+
+def consolidate_memory(memory_id, evidence):
+    """Promote a confirmed memory only when explicit consolidation evidence exists."""
+    evidence = str(evidence or "").strip()
+    if not evidence: return False
+    try:
+        with _LOCK, closing(_db()) as conn, conn:
+            cur = conn.execute("UPDATE memories SET level='consolidated',evidence=?,validated_at=? "
+                "WHERE id=? AND state='confirmed'", (evidence[:4000],_now(),int(memory_id)))
+            return cur.rowcount > 0
+    except (sqlite3.Error,TypeError,ValueError): return False
