@@ -13,9 +13,12 @@ def ion_development(parameters: dict, player=None) -> str:
     try:
         from ion.orchestration.supervisor import IonSupervisor
         result = asyncio.run(IonSupervisor().run_project(task, working_directory))
-        return json.dumps(result, ensure_ascii=False, indent=2)
+        rendered = json.dumps(result, ensure_ascii=False, indent=2)
+        if result.get("status") != "completed":
+            return "failed: " + rendered
+        return rendered
     except Exception as exc:
-        return f"Ion não conseguiu concluir a execução: {type(exc).__name__}: {exc}"
+        return f"failed: Ion não conseguiu concluir a execução: {type(exc).__name__}: {exc}"
 
 
 TOOL = {
