@@ -1233,7 +1233,12 @@ class JarvisLive:
         """Wait for every captured PCM frame to reach STT before flushing it."""
         queue = self.out_queue
         if queue is not None:
-            await queue.join()
+            try:
+                await asyncio.wait_for(queue.join(), timeout=5.0)
+            except asyncio.TimeoutError:
+                self.ui.write_log(
+                    "WARN: A fila de áudio demorou para esvaziar; vou tentar transcrever o áudio recebido."
+                )
         engine = self._engine
         if engine is not None and hasattr(engine, "flush_microphone"):
             text = await engine.flush_microphone(SEND_SAMPLE_RATE)
