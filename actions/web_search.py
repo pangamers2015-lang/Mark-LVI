@@ -78,6 +78,68 @@ def _get_api_key() -> str:
         return json.load(f)["gemini_api_key"]
 
 
+def _get_tavily_api_key() -> str:
+    """Optional Tavily key: environment takes precedence over local config."""
+    import os
+
+    key = os.environ.get("TAVILY_API_KEY", "").strip()
+    if key:
+        return key
+    try:
+        with open(API_CONFIG_PATH, "r", encoding="utf-8") as f:
+            return str(json.load(f).get("tavily_api_key", "")).strip()
+    except (OSError, ValueError, TypeError):
+        return ""
+
+
+def _tavily_search(query: str, *, mode: str = "search") -> str:
+    """AI-oriented live search. Optional: needs a free Tavily API key."""
+    import requests
+
+    api_key = _get_tavily_api_key()
+    if not api_key:
+        raise RuntimeError("Tavily API key is not configured")
+    payload = {
+        "query": query,
+        "search_depth": "advanced" if mode == "research" else "basic",
+        "topic": "news" if mode == "news" else "general",
+        "max_results": 10 if mode == "research" else 6,
+        "include_answer": True,
+        "include_raw_content": False,
+    }
+    response = requests.post(
+        "https://api.tavily.com/search",
+        headers={"Authorization": f"Bearer {api_key}",
+                 "Content-Type": "application/json"},
+        json=payload, timeout=18,
+    )
+    response.raise_for_status()
+    data = response.json()
+    lines = [f"Tavily {mode} results for: {query}"]
+    answer = str(data.get("answer") or "").strip()
+    if answer:
+        lines.extend(["", "Tavily summary:", answer])
+    results = data.get("results") or []
+    if results:
+        lines.extend(["", "Sources:"])
+    for index, item in enumerate(results[:10], 1):
+        title = str(item.get("title") or "").strip()
+        url = str(item.get("url") or "").strip()
+        content = str(item.get("content") or "").strip()
+        published = str(item.get("published_date") or "").strip()
+        if title:
+            lines.append(f"{index}. {title}")
+        if published:
+            lines.append(f"   Published: {published}")
+        if content:
+            lines.append(f"   {content[:1400]}")
+        if url:
+            lines.append(f"   Source: {url}")
+    if not answer and not results:
+        raise ValueError("Tavily returned no answer and no search results")
+    return "\n".join(lines)
+
+
 def _gemini_search(query: str) -> str:
     if not _gemini_available():
         raise _QuotaCooldown("Gemini grounding is in quota cooldown")
@@ -132,7 +194,7 @@ def _ddg_search(query: str, max_results: int = 6) -> list[dict]:
     results = []
     try:
         with DDGS() as ddgs:
-            for r in ddgs.text(query, max_results=max_results):
+            for r in ddgs.text(query, region="br-pt", max_results=max_results):
                 results.append({
                     "title":   r.get("title",  ""),
                     "snippet": r.get("body",   ""),
@@ -149,7 +211,7 @@ def _ddg_news(query: str, max_results: int = 8) -> list[dict]:
     results = []
     try:
         with DDGS() as ddgs:
-            for r in ddgs.news(query, max_results=max_results):
+            for r in ddgs.news(query, region="br-pt", max_results=max_results):
                 results.append({
                     "title":   r.get("title",  ""),
                     "snippet": r.get("body",   ""),
@@ -238,57 +300,168 @@ def _gemini_headlines(n: int = 5) -> tuple[list[str], str]:
     return headlines[:n], raw.strip()
 
 
+# ── Direct weather API ─────────────────────────────────────────────────────────
+_WMO_PT = {
+    0: "céu limpo", 1: "predominantemente limpo", 2: "parcialmente nublado",
+    3: "nublado", 45: "neblina", 48: "neblina com geada",
+    51: "garoa leve", 53: "garoa moderada", 55: "garoa intensa",
+    56: "garoa congelante leve", 57: "garoa congelante intensa",
+    61: "chuva leve", 63: "chuva moderada", 65: "chuva forte",
+    66: "chuva congelante leve", 67: "chuva congelante forte",
+    71: "neve leve", 73: "neve moderada", 75: "neve forte",
+    77: "grãos de neve", 80: "pancadas de chuva leves",
+    81: "pancadas de chuva moderadas", 82: "pancadas de chuva fortes",
+    85: "pancadas de neve leves", 86: "pancadas de neve fortes",
+    95: "trovoadas", 96: "trovoadas com granizo leve",
+    99: "trovoadas com granizo forte",
+}
+
+
+def _weather(query: str) -> str:
+    """Fetch current conditions and a three-day forecast without an API key."""
+    import re
+    import requests
+
+    place = re.sub(
+        r"(?i)^(?:qual\s+(?:é\s+)?a\s+)?(?:previs[aã]o\s+do\s+tempo|"
+        r"previs[aã]o|clima|tempo|weather(?:\s+forecast)?|forecast)"
+        r"(?:\s+(?:para|em|de|da|do|for|in))?\s*",
+        "", str(query or "")
+    ).strip(" ,.-")
+    if not place:
+        raise ValueError("Informe a cidade para consultar a previsão do tempo.")
+    parts = [part.strip() for part in place.split(",") if part.strip()]
+    city = parts[0] if parts else place
+    state_hint = parts[1].lower() if len(parts) > 1 else ""
+    country_hint = "BR" if any(
+        term in place.lower() for term in ("brasil", "brazil", "sc", "santa catarina")
+    ) else None
+    geo_params = {"name": city, "count": 8, "language": "pt", "format": "json"}
+    if country_hint:
+        geo_params["countryCode"] = country_hint
+    geo_response = requests.get(
+        "https://geocoding-api.open-meteo.com/v1/search",
+        params=geo_params, timeout=12,
+    )
+    geo_response.raise_for_status()
+    matches = geo_response.json().get("results") or []
+    if not matches:
+        raise ValueError(f"Não encontrei a localização '{city}'.")
+    selected = matches[0]
+    if state_hint:
+        for candidate in matches:
+            admin = str(candidate.get("admin1") or "").lower()
+            if state_hint in admin or admin in state_hint:
+                selected = candidate
+                break
+    forecast_response = requests.get(
+        "https://api.open-meteo.com/v1/forecast",
+        params={
+            "latitude": selected["latitude"],
+            "longitude": selected["longitude"],
+            "current": (
+                "temperature_2m,relative_humidity_2m,apparent_temperature,"
+                "precipitation,weather_code,wind_speed_10m"
+            ),
+            "daily": (
+                "weather_code,temperature_2m_max,temperature_2m_min,"
+                "precipitation_probability_max,precipitation_sum"
+            ),
+            "forecast_days": 3, "timezone": "auto",
+            "temperature_unit": "celsius", "wind_speed_unit": "kmh",
+        },
+        timeout=12,
+    )
+    forecast_response.raise_for_status()
+    data = forecast_response.json()
+    current = data.get("current") or {}
+    daily = data.get("daily") or {}
+    location = ", ".join(
+        str(value) for value in (
+            selected.get("name"), selected.get("admin1"), selected.get("country")
+        ) if value
+    )
+    code = int(current.get("weather_code", -1))
+    lines = [
+        f"Previsão do tempo — {location}",
+        f"Agora ({current.get('time', 'horário local')}): "
+        f"{_WMO_PT.get(code, 'condição não informada')}, "
+        f"{current.get('temperature_2m', '—')} °C; sensação de "
+        f"{current.get('apparent_temperature', '—')} °C.",
+        f"Umidade: {current.get('relative_humidity_2m', '—')}%. "
+        f"Vento: {current.get('wind_speed_10m', '—')} km/h. "
+        f"Precipitação atual: {current.get('precipitation', '—')} mm.",
+        "Próximos dias:",
+    ]
+    dates = daily.get("time") or []
+    for index, date in enumerate(dates[:3]):
+        day_code = (daily.get("weather_code") or [])[index]
+        maximum = (daily.get("temperature_2m_max") or [])[index]
+        minimum = (daily.get("temperature_2m_min") or [])[index]
+        rain_chance = (daily.get("precipitation_probability_max") or [])[index]
+        rain_total = (daily.get("precipitation_sum") or [])[index]
+        lines.append(
+            f"- {date}: {_WMO_PT.get(int(day_code), 'condição variável')}; "
+            f"mínima {minimum} °C, máxima {maximum} °C; "
+            f"chance máxima de chuva {rain_chance}%; "
+            f"precipitação prevista {rain_total} mm."
+        )
+    lines.append("Fonte: Open-Meteo (https://open-meteo.com/).")
+    return "\n".join(lines)
+
+
 # ── Modes ──────────────────────────────────────────────────────────────────────
 
 def _search(query: str) -> str:
-    """Default search — Gemini grounded, DDG fallback."""
+    """Search order: Tavily (when configured), Gemini grounding, then DDGS."""
+    if _get_tavily_api_key():
+        try:
+            return _tavily_search(query, mode="search")
+        except Exception as e:
+            print(f"[WebSearch] Tavily search failed ({e}) — trying Gemini/DDGS")
     try:
         return _gemini_search(query)
     except Exception as e:
         _log_gemini_failure("Gemini search", e)
-        results = _ddg_search(query)
-        return _format_ddg(query, results)
+    return _format_ddg(query, _ddg_search(query, max_results=8))
+
+
+def _weather_mode(query: str) -> str:
+    try:
+        return _weather(query)
+    except Exception as e:
+        print(f"[WebSearch] Open-Meteo weather failed ({e}) — trying web search")
+        return _search(f"current weather and 3-day forecast: {query}")
 
 
 def _news(query: str) -> str:
-    """
-    DDG first, Gemini as backup.
-
-    The old version raced both backends in parallel and kept the first answer.
-    That burned one google_search grounding call on *every* news request —
-    including the startup briefing — even when DDG had already won the race.
-    Grounding has a small quota, so it ran dry after a handful of launches and
-    then 429'd for everything else (research/compare), which are the modes that
-    actually need a synthesised answer.
-
-    DDG news returns in well under a second and gives raw headlines, which is
-    exactly what the briefing wants, so it goes first and Gemini is only touched
-    when DDG comes back empty.
-    """
-    gemini_query = f"latest news today: {query}" if query else "top world news today"
-    ddg_query    = query if query else "world news today"
-
-    def _ddg_attempt() -> str:
-        return _format_news(ddg_query, _ddg_news(ddg_query, max_results=8))
-
-    text = _run_bounded(_ddg_attempt, timeout=5.0, label="DDG news")
+    """News search: Tavily news, then DDGS news, then Gemini grounding."""
+    if _get_tavily_api_key():
+        try:
+            return _tavily_search(query or "latest news", mode="news")
+        except Exception as e:
+            print(f"[WebSearch] Tavily news failed ({e}) — trying DDGS")
+    ddg_query = query if query else "world news today"
+    text = _run_bounded(
+        lambda: _format_news(ddg_query, _ddg_news(ddg_query, max_results=8)),
+        timeout=7.0, label="DDG news",
+    )
     if text and len(text) > 60 and not text.startswith("No news found"):
         return text
-
     text = _run_bounded(
-        lambda: _gemini_search(gemini_query), timeout=6.0, label="Gemini news"
+        lambda: _gemini_search(f"latest news today: {ddg_query}"),
+        timeout=8.0, label="Gemini news",
     )
-    if text and len(text) > 60:
-        return text
-
-    return f"No news found for: {query}"
+    return text if text and len(text) > 60 else f"No news found for: {query}"
 
 
 def _research(query: str) -> str:
-    """
-    Deep dive — asks Gemini for a comprehensive answer with context.
-    Falls back to a wider DDG fetch.
-    """
+    """Deep research with Tavily advanced search when an API key is configured."""
+    if _get_tavily_api_key():
+        try:
+            return _tavily_search(query, mode="research")
+        except Exception as e:
+            print(f"[WebSearch] Tavily research failed ({e}) — trying Gemini/DDGS")
     research_query = (
         f"Comprehensive, detailed explanation of: {query}. "
         "Include background context, key facts, current state, and important nuances."
@@ -297,19 +470,22 @@ def _research(query: str) -> str:
         return _gemini_search(research_query)
     except Exception as e:
         _log_gemini_failure("Gemini research", e)
-        results = _ddg_search(query, max_results=10)
-        return _format_ddg(query, results)
+    return _format_ddg(query, _ddg_search(query, max_results=10))
 
 
 def _price(query: str) -> str:
     """Product price lookup — searches for current market prices."""
     price_query = f"current price of {query} — how much does it cost today"
+    if _get_tavily_api_key():
+        try:
+            return _tavily_search(price_query, mode="search")
+        except Exception as e:
+            print(f"[WebSearch] Tavily price search failed ({e}) — trying Gemini/DDGS")
     try:
         return _gemini_search(price_query)
     except Exception as e:
         _log_gemini_failure("Gemini price", e)
-        results = _ddg_search(f"{query} price buy", max_results=6)
-        return _format_ddg(query, results)
+    return _format_ddg(query, _ddg_search(f"{query} price buy", max_results=8))
 
 
 def _compare(items: list[str], aspect: str) -> str:
@@ -317,6 +493,11 @@ def _compare(items: list[str], aspect: str) -> str:
         f"Compare {', '.join(items)} in terms of {aspect}. "
         "Give specific facts and data."
     )
+    if _get_tavily_api_key():
+        try:
+            return _tavily_search(query, mode="search")
+        except Exception as e:
+            print(f"[WebSearch] Tavily compare failed ({e}) — trying Gemini/DDGS")
     try:
         return _gemini_search(query)
     except Exception as e:
@@ -377,6 +558,8 @@ def web_search(
             found = _research(query)
         elif mode == "price":
             found = _price(query)
+        elif mode == "weather":
+            found = _weather_mode(query)
         else:
             found = _search(query)
 
@@ -404,7 +587,7 @@ TOOL = {
     "behavior": "NON_BLOCKING",
     "scheduling": "WHEN_IDLE",
     "name": "web_search",
-    "description": "Searches the web. Use for ANY question about current facts, events, prices, or topics — always prefer this over guessing. Modes: 'search' (default), 'news' (latest headlines on a topic), 'research' (deep comprehensive answer), 'price' (product cost lookup), 'compare' (side-by-side comparison of items).",
+    "description": "Searches the live web for current facts, events, prices and topics. Always use this rather than guessing. For current weather or forecasts, use mode='weather' (direct free Open-Meteo API; no key required). Modes: 'search' (default), 'news', 'research', 'price', 'compare', 'weather'. Search providers: optional Tavily API (if configured), Gemini Google Search grounding, then DDGS fallback.",
     "parameters": {
         "type": "OBJECT",
         "properties": {
@@ -414,7 +597,7 @@ TOOL = {
             },
             "mode": {
                 "type": "STRING",
-                "description": "search | news | research | price | compare"
+                "description": "search | news | research | price | compare | weather"
             },
             "items": {
                 "type": "ARRAY",
