@@ -149,6 +149,11 @@ class EchoGuard:
         return self._floor
 
     @property
+    def ready_for_barge_in(self) -> bool:
+        """True after enough microphone blocks have characterised this room's echo."""
+        return len(self._residuals) >= _WARMUP
+
+    @property
     def reliable(self) -> bool:
         """False when the acoustics are too poor to judge on content alone.
 
