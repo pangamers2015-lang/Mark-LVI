@@ -95,7 +95,7 @@ from core                      import undo as undo_stack
 from core                      import confirm as confirm_gate
 from core                      import audio_devices
 from core.action_loader        import discover_actions
-from core.echo                 import EchoGuard
+from core.echo                 import BargeInDetector, EchoGuard
 from core.viseme               import VisemeStream
 from core.wake_word            import (
     WakeWordDetector, is_ready as wake_is_ready, install_and_download as wake_install,
@@ -729,6 +729,8 @@ class JarvisLive:
         self._ptt                  = None    # core.hotkey.PushToTalk
         self._out_level            = 0.0     # level of the audio being played right now
         self._echo                 = EchoGuard()
+        self._barge_in_detector    = BargeInDetector()
+        self._barge_in_pending     = False
         # `stream.write()` returns when the buffer accepts the audio, not when the
         # speaker has finished with it, so sound is still in the room after the
         # speaking flag drops. Streaming the microphone during that gap is how an
@@ -2122,6 +2124,22 @@ class JarvisLive:
         print("[JARVIS] 🎤 Mic started")
         loop = asyncio.get_event_loop()
 
+        def _interrupt_and_replay(captured_blocks):
+            """Cut playback, then deliver the user's confirmed speech to Live."""
+            try:
+                self.interrupt()
+                for block in captured_blocks:
+                    self.out_queue.put_nowait({
+                        "data": block,
+                        "mime_type": f"audio/pcm;rate={SEND_SAMPLE_RATE}",
+                    })
+                print(
+                    f"[JARVIS] ✋ Voice barge-in confirmed "
+                    f"({len(captured_blocks)} microphone blocks)."
+                )
+            finally:
+                self._barge_in_pending = False
+
         def callback(indata, frames, time_info, status):
             # Count callbacks that began while PTT was held. Releasing the key
             # waits for them to enqueue their final PCM frames before flushing.
@@ -2162,15 +2180,27 @@ class JarvisLive:
             # the echo of what we are playing right now", sustained long enough
             # that a cough or a keystroke cannot trigger it.
             if jarvis_speaking:
-                # Nothing is streamed while JARVIS talks.
-                #
-                # Interrupting by voice used to live here: `EchoGuard` can pick a
-                # user out from under our own echo, and `core/echo.py` still does
-                # that for the tail below. Re-enabling is small — classify each
-                # block here and call interrupt() after `required_blocks` of
-                # agreement — but it depends on the listener's room, so it stays
-                # out until it can be tried on real hardware.
+                # Keep the microphone local while calibrating the room. Once the
+                # EchoGuard has enough samples, require sustained non-echo speech
+                # before interrupting and forwarding only those confirmed blocks.
+                if self._barge_in_pending:
+                    return
+                try:
+                    is_user_speech = self._echo.is_user_speech(
+                        indata, SEND_SAMPLE_RATE, _pcm_level(indata)
+                    )
+                    confirmed = bool(self._echo.ready_for_barge_in and is_user_speech)
+                    captured = self._barge_in_detector.observe(
+                        indata.tobytes(), confirmed, self._echo.required_blocks
+                    )
+                    if captured:
+                        self._barge_in_pending = True
+                        loop.call_soon_threadsafe(_interrupt_and_replay, captured)
+                except Exception:
+                    self._barge_in_detector.reset()
                 return
+
+            self._barge_in_detector.reset()
 
             # ── Echo tail ────────────────────────────────────────────────────
             # The speaking flag has dropped but the speakers have not finished.
