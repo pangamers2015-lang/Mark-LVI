@@ -291,6 +291,8 @@ class JarvisUI:
         self._server_thread = None
         self._ptt_armed = False
         self._logs = []
+        self._camera_stop = threading.Event()
+        self._camera_thread = None
         self._muted = False
         self._current_file = None
         self.on_text_command = None
@@ -416,9 +418,53 @@ class JarvisUI:
         return False
 
     def start_camera_stream(self):
+        self._camera_stop.clear()
         _EVENTS.emit({"tipo": "camera", "start": True})
+        if self._camera_thread and self._camera_thread.is_alive():
+            return
+        self._camera_thread = threading.Thread(target=self._camera_loop, daemon=True, name="Yon-Web-Camera")
+        self._camera_thread.start()
+
+    def _camera_loop(self):
+        try:
+            import cv2
+            cam_idx = 0
+            try:
+                cfg = json.loads(API_FILE.read_text(encoding="utf-8"))
+                cam_idx = int(cfg.get("camera_index", 0))
+            except Exception:
+                pass
+            backend = cv2.CAP_DSHOW if os.name == "nt" else cv2.CAP_ANY
+            cap = cv2.VideoCapture(cam_idx, backend)
+            if not cap.isOpened():
+                cap.release()
+                cap = cv2.VideoCapture(0)
+            if not cap.isOpened():
+                _EVENTS.emit({"tipo": "aviso", "texto": "Não consegui abrir a câmera."})
+                return
+            try:
+                while not self._camera_stop.is_set():
+                    ok, frame = cap.read()
+                    if not ok:
+                        time.sleep(0.08)
+                        continue
+                    height, width = frame.shape[:2]
+                    if width > 960:
+                        frame = cv2.resize(frame, (960, int(height * 960 / width)))
+                    ok, encoded = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 72])
+                    if ok:
+                        import base64
+                        _EVENTS.emit({"tipo": "camera", "data": base64.b64encode(encoded.tobytes()).decode("ascii")})
+                    time.sleep(0.08)
+            finally:
+                cap.release()
+        except Exception as exc:
+            _EVENTS.emit({"tipo": "aviso", "texto": "Câmera: " + str(exc)[:160]})
+        finally:
+            _EVENTS.emit({"tipo": "camera", "start": False})
 
     def stop_camera_stream(self):
+        self._camera_stop.set()
         _EVENTS.emit({"tipo": "camera", "start": False})
 
     def notify_phone_connected(self):
