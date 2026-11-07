@@ -21,8 +21,8 @@ Esta interface foi desenvolvida como uma implementação independente inspirada 
 
 A implementação de origem foi inspecionada em `main.py`, `core/echo.py`, `core/barge_in.py`, `providers/audio.py` e `web/index.html`.
 
-- Modelo de voz/conversa em tempo real identificado no código de origem: `models/gemini-3.1-flash-live-preview`.
-- Modelo textual de reserva: `gemini-2.5-flash`.
+- Modelo de voz/conversa em tempo real identificado no código de origem: `gemini-3.8-live`.
+- Modelo textual de reserva: `gemini-3.8-flash`.
 - Adaptados para este projeto: fluxo PCM 16 kHz de entrada / 24 kHz de saída, transcrições de entrada/saída, reprodução em blocos e interrupção imediata ao pressionar Espaço durante a resposta.
 - A interface não reaproveita os pop-ups antigos nem as legendas sobre a Orb.
 
