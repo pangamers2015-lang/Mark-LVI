@@ -206,7 +206,11 @@ def _process_inbox(root=None, interpreter=None) -> dict:
                     memory_text = str(result.get("memory", "")).strip()[:8000]
                     startup = str(result.get("startup_instruction", "")).strip()[:1000]
                     speech = str(result.get("speech_text", "")).strip()[:500]
-                    notify_user = result.get("notify_user") is True
+                    importance = str(result.get("importance", "medium")).strip().lower()
+                    notify_user = (
+                        result.get("notify_user") is True
+                        and importance in {"high", "critical"}
+                    )
                     notification = str(result.get("notification_text", "")).strip()[:500]
                     if kind not in {"knowledge", "procedure", "startup_once", "speak_once"} or not memory_text:
                         raise ValueError("Interpreted content failed validation.")
