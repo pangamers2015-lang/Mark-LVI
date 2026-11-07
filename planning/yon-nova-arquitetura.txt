@@ -1,82 +1,201 @@
-PLANO DE REESTRUTURACAO DO YON — DOCUMENTO DE PLANEJAMENTO
-Versao: 1.0
+PLANO GERAL DO PROJETO JARVIS — ARQUITETURA E CRONOGRAMA
+Versao: 2.0
 Data: 07/11/2026
-Status: RASCUNHO INICIAL — NAO IMPLEMENTAR AUTOMATICAMENTE
+Status: PLANEJAMENTO ARQUITETURAL EM DEFINICAO — NAO IMPLEMENTAR AUTOMATICAMENTE
 
 OBJETIVO
-Planejar uma nova arquitetura para o Yon, tendo um modelo da OpenAI pela API como cerebro central de raciocinio e coordenacao. Este documento e um registro de planejamento para o usuario e o ChatGPT. Nao e uma instrucao para o aplicativo carregar, interpretar ou executar.
+Construir o Jarvis do zero como um agente autonomo, com cerebro central, memoria propria, agentes executores, acesso operacional ao computador e capacidade de analisar, modificar, testar e evoluir o proprio codigo. O projeto novo nao deve reutilizar nem presumir capacidades, modulos ou integracoes de sistemas anteriores. Este TXT e o unico artefato de planejamento a preservar e atualizar.
 
-PRINCIPIO FUNDAMENTAL
-Separar inteligencia, voz, memoria e ferramentas. O cerebro central decide e coordena; servicos especializados executam tarefas. Evitar pagar por recursos que podem ser executados localmente ou por fornecedores alternativos.
+PRINCIPIOS FUNDAMENTAIS
+- O cerebro central define arquitetura, tecnologias, contratos, tarefas, prioridades e criterios de aceite.
+- Os agentes executores implementam tarefas especificas e subordinadas; nao alteram a arquitetura por iniciativa propria.
+- O Jarvis deve poder administrar o computador e modificar o proprio codigo, conforme o objetivo do projeto.
+- A seguranca deve preservar integridade, continuidade e recuperabilidade, sem bloquear desnecessariamente a autonomia desejada.
+- Toda mudanca relevante deve ser rastreavel, testavel e reversivel.
+- Separar planejamento, implementacao, testes, aprovacao do usuario e promocao para estavel.
+- Nenhuma etapa e considerada implementada apenas por estar definida neste documento.
 
-ARQUITETURA DESEJADA (PROPOSTA)
-1. CEREBRO CENTRAL — API OPENAI
-- Interpretar pedidos, raciocinar, planejar, decidir e coordenar ferramentas.
-- Usar contexto e memoria recuperada pelo Yon.
-- Escolher quando consultar especialistas ou executar ferramentas.
-- Controlar tamanho do contexto, frequencia de chamadas e nivel de raciocinio para controlar custos.
-- O modelo exato e seus precos devem ser confirmados na documentacao oficial antes da implementacao.
+EQUIPE OFICIAL DE AGENTES
+1. CHATGPT / OPENAI — CEREBRO CENTRAL
+- Responsavel por interpretar objetivos, projetar a arquitetura, escolher tecnologias, definir contratos, dividir tarefas, coordenar agentes e tomar decisoes.
+- Mantem a visao geral do projeto e recebe relatorios concisos de execucao e testes.
+- Nao deve desperdiçar contexto revisando manualmente grandes volumes de codigo quando verificacoes automatizadas e relatorios rastreaveis forem suficientes.
+- A responsabilidade final pela direcao arquitetural permanece com o cerebro central.
 
-2. VOZ E AUDIO
-- Preferir reconhecimento de fala e sintese de voz locais/gratuitos quando a qualidade e o hardware permitirem.
-- Avaliar Piper e Kokoro para sintese local; avaliar alternativas locais para transcricao.
-- A voz pode ser apenas a interface de entrada/saida, sem precisar ser o cerebro.
-- Manter possibilidade de usar voz hospedada quando houver vantagem clara.
-- Verificar requisitos, licencas, idiomas, qualidade, latencia e consumo de recursos.
+2. GEMINI API — AGENTE EXECUTOR
+- Implementa tarefas de desenvolvimento especificadas pelo cerebro central.
+- Devolve codigo, arquivos, testes e evidencias conforme os criterios de aceite.
 
-3. MEMORIA DO YON
-- Manter memoria persistente propria, com armazenamento local e recuperacao contextual.
-- Registrar fatos do projeto, preferencias, decisoes, procedimentos, resultados e evidencias.
-- Recuperar somente o contexto relevante para cada solicitacao.
-- A memoria complementa o modelo; nao deve tentar reensinar conhecimentos gerais que o modelo ja possui.
-- Definir politicas de validacao, atualizacao, privacidade e exclusao.
+3. FCC CLOUD (TAMBEM REFERIDO PELO USUARIO COMO FREE CLOUD) — AGENTE EXECUTOR
+- Implementa tarefas de desenvolvimento especificadas pelo cerebro central.
+- Devolve codigo, arquivos, testes e evidencias conforme os criterios de aceite.
 
-4. IMAGENS, VIDEO E OUTRAS MIDIAS
-- Avaliar fornecedores/API alternativos para geracao e edicao de imagens e video.
-- O cerebro central cria instrucoes e coordena; o servico especializado gera a midia.
-- Comparar qualidade, preco por tarefa, limites, direitos de uso e disponibilidade no Brasil.
-- Nao presumir que um servico ou endpoint continua disponivel: verificar antes de integrar.
+4. QWEN LOCAL — AGENTE EXECUTOR
+- Modelo local subordinado ao cerebro central.
+- Implementa tarefas adequadas a sua capacidade e ao hardware disponivel.
+- Desempenho, modelo exato e requisitos devem ser validados por testes reais antes da escolha definitiva.
 
-5. PESQUISA NA WEB
-- Usar ferramenta/fornecedor de pesquisa separado quando for mais economico ou adequado.
-- O cerebro central formula a consulta, avalia fontes e sintetiza os resultados.
-- Registrar fontes e diferenciar informacao verificada de hipotese.
+ORQUESTRACAO DOS AGENTES
+- O cerebro central determina a divisao do trabalho considerando capacidade, dependencias e risco.
+- Tarefas paralelas devem ter escopos de arquivos separados e contratos explicitos para evitar conflitos.
+- Cada tarefa deve conter objetivo, arquivos permitidos, especificacao, interfaces, dependencias, testes e criterios de aceite.
+- Agentes podem sugerir melhorias, mas propostas de arquitetura ou tecnologia exigem aprovacao do cerebro central.
+- Falhas isoladas retornam ao agente responsavel; falhas de integracao sao encaminhadas aos agentes envolvidos.
+- Reincidencia de falha deve provocar reavaliacao da estrategia, sem entrar em ciclos infinitos.
+- O cerebro central recebe relatorios curtos e evidencias; solicita investigacao aprofundada quando houver risco, ambiguidade ou falha recorrente.
 
-6. PROGRAMACAO E EXECUCAO
-- Avaliar FCC Cloud como agente de programacao e execucao delegada.
-- Manter Qwen local como auxiliar opcional, subordinado ao cerebro central.
-- O cerebro central continua coordenando e validando os resultados.
-- Nenhum agente deve alterar o projeto principal, instalar dependencias ou executar operacoes destrutivas sem as permissoes definidas.
+CICLO DE AUTODESENVOLVIMENTO E APROVACAO
+1. Usuario solicita uma modificacao.
+2. Cerebro central entende o objetivo, identifica os componentes afetados e especifica a tarefa.
+3. Jarvis cria uma versao experimental isolada, sem sobrescrever a versao estavel.
+4. Agentes executam a implementacao e os testes automatizados verificam os criterios definidos.
+5. Jarvis apresenta a versao experimental ao usuario, explica o que mudou e orienta o que deve ser observado.
+6. Usuario solicita ajustes, rejeita ou aprova.
+7. Em caso de ajustes, Jarvis registra o feedback, altera a versao experimental e repete os testes e a apresentacao.
+8. Somente com aprovacao explicita do usuario a versao experimental e promovida a estavel.
+9. Apos a promocao, Jarvis confirma inicializacao e verificacoes essenciais; a versao estavel anterior torna-se a recuperacao.
 
-7. ORQUESTRACAO E CUSTOS
-- Yon pode permanecer aberto 24 horas, mas nao deve enviar chamadas continuamente sem necessidade.
-- Chamadas ao modelo acontecem quando ha uma tarefa, uma decisao ou uma verificacao justificavel.
-- Implementar limites de gasto, contagem de tokens, metricas por tarefa, alertas e modo economico.
-- Definir um orcamento inicial de teste de aproximadamente R$ 50, sujeito a cambio, impostos e tarifas.
-- Nao tratar esse valor como assinatura nem como garantia de quantidade fixa de tokens, minutos ou imagens.
+POLITICA DE VERSOES E RECUPERACAO
+- Manter somente uma versao estavel atual e uma recuperacao da ultima versao estavel anterior.
+- Durante o desenvolvimento pode existir uma versao experimental temporaria, separada da estavel.
+- Ao aprovar uma nova versao, a anterior estavel passa a ser a recuperacao; a recuperacao mais antiga e descartada somente depois de confirmar a promocao e a inicializacao da nova estavel.
+- A versao experimental nunca deve sobrescrever arquivos ou dados da versao estavel antes da aprovacao.
+- A recuperacao deve continuar possivel mesmo se o proprio Jarvis nao conseguir iniciar; manter mecanismo externo/minimo de recuperacao independente do processo principal.
 
-REQUISITOS DE SEGURANCA E CONTINUIDADE
-- Preservar chaves de API fora do GitHub e nunca registrar segredos em logs.
-- Usar permissoes minimas, ambientes isolados e validacao antes de integrar codigo.
-- Nao apagar nem substituir os sistemas atuais durante a fase de planejamento.
-- Implementar em etapas pequenas, com testes e confirmacao do usuario.
-- Distinguir claramente planejamento, codigo enviado ao GitHub, atualizacao local, instalacao e teste real.
+BACKUP INTELIGENTE POR ESCOPO
+O backup deve preservar somente o necessario para reverter a mudanca, sem copiar o repositorio inteiro por padrao.
+- Nivel local: arquivos, componentes ou recursos especificos alterados.
+- Nivel modular: modulo afetado e dependencias que possam ser impactadas.
+- Nivel global: estado completo do sistema apenas quando a mudanca estrutural justificar.
+- O cerebro central/Jarvis identifica o escopo antes da modificacao e amplia o backup se houver dependencias ou efeitos colaterais.
+- Alteracoes de dados/banco exigem estrategia propria de backup e migracao reversivel.
+- O backup anterior so e descartado depois de confirmar que a nova versao foi promovida e inicializada corretamente.
+- O historico de commits do GitHub tambem deve permitir rastrear e reverter mudancas, sem confundir historico Git com copias completas de trabalho.
 
-PRIMEIRAS ETAPAS DE TRABALHO
-1. Levantar o que existe hoje no Yon e quais partes devem ser preservadas.
-2. Definir o modelo OpenAI central e confirmar precos, limites e recursos atuais.
-3. Desenhar o fluxo de mensagens, memoria, ferramentas e voz.
-4. Estimar custos com cenarios reais de uso diario.
-5. Definir interfaces entre cerebro, voz, memoria e provedores externos.
-6. Implementar primeiro um prototipo isolado, sem substituir o aplicativo atual.
-7. Testar qualidade, latencia, estabilidade e custo antes de decidir a migracao.
+GITHUB E SINCRONIZACAO BILATERAL
+- O repositorio GitHub e a referencia versionada do codigo e da documentacao do projeto.
+- Jarvis deve consultar e enviar alteracoes ao GitHub, mantendo sincronizacao bilateral controlada.
+- A versao estavel aprovada deve ser identificavel no repositorio; o trabalho experimental deve permanecer separado ate a aprovacao.
+- Registrar commits, diferencas, autoria/agente, testes, aprovacao e identificacao da versao.
+- Resolver conflitos explicitamente; nunca sobrescrever silenciosamente alteracoes mais recentes.
+- Chaves de API, senhas e segredos nunca devem ser enviados ao repositorio.
 
-PENDENCIAS A CONFIRMAR
-- Modelo OpenAI exato, precos atuais, limites de taxa e disponibilidade regional.
-- Qual solucao local de voz funciona melhor no computador do usuario.
-- Fornecedor de imagem/video e ferramenta de pesquisa com melhor custo-beneficio.
-- Como preservar e aproveitar a memoria cognitiva ja existente sem duplicacao.
-- Como integrar FCC Cloud e Qwen sem retirar a autoridade do cerebro central.
+ACESSO AO COMPUTADOR E AUTONOMIA
+- O objetivo do projeto e permitir que Jarvis opere o computador e administre arquivos, programas, processos e configuracoes necessarios as tarefas.
+- Jarvis tambem deve poder ler, analisar e modificar o proprio codigo e os componentes que o executam.
+- O acesso amplo deve ser acompanhado de registro de operacoes, rastreabilidade, recuperacao externa e verificacao de resultados.
+- Operacoes que possam destruir dados importantes, expor segredos ou impedir a recuperacao precisam de politicas explicitas e trilha de auditoria.
+- Implementar um mecanismo externo de parada e recuperacao que nao dependa do processo principal do Jarvis.
+- Segredos devem ficar fora do GitHub e fora de logs; o acesso a credenciais deve ser controlado e rastreavel.
+
+MEMORIA E APRENDIZAGEM
+- Criar memoria operacional persistente para decisoes, arquitetura, tarefas, procedimentos, feedback do usuario, resultados de testes e erros conhecidos.
+- Recuperar contexto relevante antes de planejar novas tarefas.
+- Registrar o motivo das decisoes e o resultado observado para evitar repetir falhas.
+- Atualizar memoria somente com informacoes verificadas ou claramente identificadas como hipotese.
+- Aprendizagem deve ocorrer por memoria, recuperacao, procedimentos e validacao; nao presumir alteracao automatica dos pesos do modelo.
+
+CRONOGRAMA GERAL — ORDEM DE CONSTRUCAO
+A ordem abaixo e um roteiro por marcos. A duracao de cada fase sera estimada depois de confirmar tecnologias, disponibilidade dos agentes e escopo. Fases dependentes so avancam quando os criterios de aceite anteriores forem atendidos.
+
+FASE 0 — PLANEJAMENTO ARQUITETURAL
+Status: CONCLUIDA NO PLANEJAMENTO; NAO IMPLEMENTADA.
+- Definir Jarvis como projeto novo, construido do zero.
+- Definir cerebro central e agentes executores oficiais.
+- Definir subordinacao, contratos de tarefas, paralelismo e fluxo de correcao.
+- Definir ciclo de versao experimental, validacao do usuario e promocao para estavel.
+- Definir uma versao estavel e uma recuperacao, com experimental temporaria.
+- Definir backups proporcionais ao escopo: local, modular ou global.
+- Definir sincronizacao bilateral com GitHub e recuperacao externa.
+Criterio de aceite: principios, papeis e ciclo de evolucao documentados e aprovados pelo usuario.
+
+FASE 1 — FUNDACAO TECNICA E CONTRATOS
+- Escolher linguagem, frameworks, estrutura de diretorios e arquitetura de processos.
+- Definir contratos de comunicacao entre cerebro central, executores, memoria e ferramentas.
+- Definir configuracao, logs, tratamento de erros e gestao de segredos.
+- Preparar ambiente de desenvolvimento e testes isolado.
+Criterio de aceite: prototipo minimo inicia, registra eventos e valida comunicacao interna.
+
+FASE 2 — GITHUB, VERSIONAMENTO E RECUPERACAO
+- Implementar integracao bilateral com GitHub.
+- Criar fluxo estavel/experimental e identificacao de versoes.
+- Implementar backup por escopo e restauracao de arquivos/modulos.
+- Implementar promocao atomica, verificacao pos-promocao e recuperacao externa.
+Criterio de aceite: demonstrar criacao de teste, rejeicao, restauracao e promocao sem perder a versao estavel.
+
+FASE 3 — CEREBRO CENTRAL E ORQUESTRACAO
+- Integrar o modelo OpenAI pela API como cerebro em tempo de execucao.
+- Implementar planejamento, decomposicao de tarefas, contratos, dependencias e distribuicao.
+- Implementar relatorios concisos, controle de tentativas e decisao de continuar/corrigir/replanejar.
+- Medir uso, latencia e custo por tarefa.
+Criterio de aceite: o cerebro consegue planejar e coordenar uma tarefa controlada com rastreabilidade.
+
+FASE 4 — INTEGRACAO DOS TRES EXECUTORES
+- Integrar Gemini API, FCC Cloud e Qwen local.
+- Medir capacidade, confiabilidade, latencia e custo de cada agente.
+- Distribuir tarefas independentes sem conflitos de arquivos.
+- Implementar retorno de artefatos, testes e evidencias.
+Criterio de aceite: cada executor conclui uma tarefa delimitada e o cerebro central coordena a integracao.
+
+FASE 5 — MEMORIA OPERACIONAL E CONTEXTO
+- Criar memoria persistente de arquitetura, decisoes, tarefas, feedback e resultados.
+- Criar recuperacao contextual e atualizacao controlada da memoria.
+- Manter estado atual do projeto e das versoes.
+Criterio de aceite: Jarvis recupera decisoes anteriores relevantes e evita repetir procedimentos que falharam.
+
+FASE 6 — ACESSO AO COMPUTADOR E FERRAMENTAS
+- Implementar controle de arquivos, processos, aplicativos, terminal e configuracoes.
+- Implementar observabilidade das acoes, logs e mecanismo externo de parada.
+- Validar operacoes de leitura, escrita, execucao e recuperacao em ambiente de teste.
+Criterio de aceite: Jarvis executa tarefas reais autorizadas e demonstra recuperacao de falhas sem perder controle.
+
+FASE 7 — AUTODESENVOLVIMENTO
+- Permitir que Jarvis analise sua propria arquitetura e codigo.
+- Detectar componentes afetados, dependencias e escopo do backup.
+- Delegar modificacoes aos executores e aplicar testes progressivos.
+- Criar, iniciar e apresentar versoes experimentais independentes.
+- Coletar feedback do usuario, iterar e promover somente apos aprovacao.
+Criterio de aceite: concluir um ciclo completo de modificacao, teste visual, correcao, aprovacao, promocao e rollback.
+
+FASE 8 — INTERFACE E COMUNICACAO
+- Construir a interface principal de conversa e estado do sistema.
+- Integrar entrada/saida por texto e voz conforme qualidade e recursos disponiveis.
+- Permitir ao usuario acompanhar somente respostas finais, estado da tarefa e pedidos de validacao, mantendo chamadas internas dos agentes em segundo plano.
+Criterio de aceite: interacao consistente por texto e, se validado, por voz; teste visual da interface experimental pelo usuario.
+
+FASE 9 — RACIOCINIO, PLANEJAMENTO E AUTONOMIA CONTINUA
+- Aprimorar raciocinio em multiplas etapas, planejamento e uso de ferramentas.
+- Implementar monitoramento de tarefas, retomada, prioridades e limites operacionais.
+- Incorporar aprendizagem baseada em resultados verificados.
+Criterio de aceite: executar fluxos de varias etapas, recuperar contexto e corrigir falhas sem perder rastreabilidade.
+
+FASE 10 — CONFIABILIDADE, SEGURANCA E OTIMIZACAO
+- Testes unitarios, integracao, ponta a ponta e regressao.
+- Verificacao de dependencias, permissoes, segredos, logs e integridade do repositorio.
+- Medir estabilidade, consumo de memoria/CPU, latencia e custos.
+- Testar falhas de agente, API indisponivel, conflito Git, atualizacao quebrada e restauracao.
+Criterio de aceite: demonstrar operacao estavel e recuperacao nos cenarios criticos definidos.
+
+FASE 11 — EXPANSAO DE CAPACIDADES
+- Avaliar pesquisa web, imagens, video, visao, automacoes e agentes especialistas adicionais.
+- Integrar somente recursos com utilidade comprovada, custo aceitavel e contratos claros.
+Criterio de aceite: cada capacidade adicional passa por avaliacao, testes e aprovacao antes de entrar na versao estavel.
+
+PENDENCIAS PARA DEFINIR ANTES DA IMPLEMENTACAO
+- Modelo OpenAI exato para o cerebro em tempo de execucao e orcamento da API.
+- Confirmar que a assinatura ChatGPT e separada do faturamento da API; a assinatura ajuda no uso do ChatGPT, mas nao substitui uma chave/API para integrar o cerebro ao aplicativo.
+- Modelo e endpoint Gemini, limites e custos.
+- Produto/versao exata do FCC Cloud e modo de execucao local.
+- Modelo Qwen, runtime e viabilidade no hardware disponivel.
+- Linguagem, frameworks, sistema de memoria, interface e tecnologias de automacao do computador.
+- Politica de seguranca para credenciais, operacoes destrutivas e recuperacao externa.
+- Criterios de aceite mensuraveis para cada fase.
+
+STATUS ATUAL
+- Planejamento do ciclo de autodesenvolvimento, aprovacao de versoes e backup inteligente por escopo: CONCLUIDO NO PLANEJAMENTO.
+- Equipe oficial informada: ChatGPT/OpenAI, Gemini API, FCC Cloud e Qwen local.
+- Cronograma geral: DEFINIDO EM NIVEL DE FASES; duracoes e tecnologias ainda pendentes.
+- Implementacao: NAO INICIADA / NAO DECLARADA COMO CONCLUIDA.
 
 REGRA FINAL
-Este arquivo e apenas um plano de trabalho. Nao deve ser importado automaticamente como conhecimento, personalidade, prompt ou comando pelo Yon. Nenhuma mudanca no codigo do aplicativo esta autorizada por este registro.
+Este documento e o registro principal de planejamento do novo Jarvis. Atualizar este mesmo arquivo com decisoes, mudancas, implementacoes, testes, resultados e pendencias. Nao criar planos paralelos. O documento nao e executavel e nao autoriza por si so qualquer implementacao.
