@@ -1,57 +1,43 @@
 # Yon — Cognitive Architecture Roadmap
 
-Branch: `feature/behavioral-preferences`
+Branch: feature/behavioral-preferences
 
-This roadmap is incremental. Existing voice, audio, UI, Gemini Live, action discovery,
-and personal-memory systems must remain intact. Do not replace them as part of this work.
+Existing voice, audio, UI, Gemini Live, providers, action discovery and personal
+memory systems must remain intact. This work extends rather than replaces them.
 
 ## Architecture principles
-
 - SQLite is the durable source of truth; Obsidian is an optional human-facing view.
-- Keep personal profile, explicit lessons, conversation continuity, and cognitive records
-  separate but connected. Do not duplicate existing stores.
-- Every knowledge item must retain its source and a state: confirmed, hypothesis, stale,
-  or contested. Never invent a numeric confidence score.
-- A goal/checkpoint is evidence of recorded progress, not proof that a task succeeded.
+- Existing profile, explicit lessons, turn continuity and work journal remain authoritative
+  for their domains; cognitive records connect them without indiscriminate duplication.
+- Knowledge retains source, evidence and state: confirmed, hypothesis, stale or contested.
+- Never invent numeric confidence. A goal/checkpoint is not proof of success.
 - Verify current repository/runtime state before resuming interrupted work.
-- No destructive or consequential action without the required user approval.
-- Add dependencies only when a working feature actually needs them.
+- Add optional dependencies only where they enable a concrete capability.
 
-## Delivery phases
+## Implemented remotely
+- Structured self-model, four memory levels, evidence-aware records, goals and checkpoints.
+- Cognitive runtime with SQLite FTS5 retrieval, optional sentence embeddings, durable
+  knowledge relations, optional NetworkX analytics, and metacognitive assessment.
+- LangGraph supervisor workflow (assess → retrieve → plan → review), with stdlib fallback.
+- yon_brain action exposing memory, validation, goals, checkpoints, relationships and reflection.
+- Voice-session context bridges continuity, explicit lessons and cognitive state.
+- User request observer stores explicit learning cues and working task intent.
+- Background task completion writes an evidence-bearing checkpoint.
+- Optional framework list in requirements-cognitive.txt.
 
-| Phase | Scope | Status |
-|---|---|---|
-| 0 | Audit existing memory, continuity, learning, and work journal | Completed (code inspection only; no runtime test claimed) |
-| 1 | Structured cognitive SQLite store: self-model, evidence-aware memories, goals, checkpoints | Implemented remotely; local runtime test pending |
-| 1b | Load compact cognitive state into each new model session | Implemented remotely; local runtime test pending |
-| 2 | Connect task lifecycle and work journal to durable checkpoints | Planned |
-| 3 | Retrieval improvements (SQLite FTS5 first; evaluate embeddings only after baseline tests) | Planned |
-| 4 | Memory hierarchy, consolidation, stale/conflict handling, and provenance policies | Planned |
-| 5 | Metacognitive review: identify missing evidence, freshness, and need for research | Planned |
-| 6 | Persistent objective planning, dependencies, safe resume, and progress reporting | Planned |
-| 7 | Research/learning/verification workflows and self-correction | Planned |
-| 8 | Supervisor and specialist workers (planner, researcher, executor, reviewer) | Planned |
-| 9 | Optional Obsidian views/export; never a runtime dependency | Planned |
+## Still requires local validation
+- Pull the remote branch and run syntax/import checks.
+- Exercise SQLite/FTS5 and all CRUD paths against a temporary database.
+- Verify action discovery and tool schema acceptance by the configured model.
+- Verify voice startup, audio input/output, reconnection, shutdown and background-task lifecycle.
+- Confirm local API keys, work journal, backups, project briefs and other user data remain untouched.
 
-## Current implementation details
+Remote implementation and static inspection are not runtime validation. Do not claim
+the cognitive system is operational until the user's local tests pass.
 
-- `memory/continuity_store.py` remains the turn-by-turn conversation history.
-- `memory/learning_store.py` remains the explicit correction/lesson store.
-- `memory/memory_manager.py` remains the existing user profile and session-summary store.
-- `memory/cognitive_store.py` adds the structured self-model, knowledge records,
-  goals, and checkpoints in `memory/cognitive.sqlite3`.
-- `main.py` adds the compact cognitive context when building a new Live session prompt.
-- SQLite and all current Phase 1 code use Python's standard library. No new package install
-  is required for this phase.
-
-## Validation gates
-
-Before declaring a phase complete:
-1. Pull the remote branch locally without overwriting local changes.
-2. Run Python syntax/import checks in the user's environment.
-3. Run isolated SQLite tests against a temporary database.
-4. Verify existing voice startup, conversation, reconnection, and shutdown behavior.
-5. Verify personal databases and API keys remain untracked and unchanged.
-6. Record exactly what passed and what remains untested.
-
-A remote commit or static code inspection is not a runtime test.
+## Next evolution after the integrated foundation
+- Add explicit goal dependencies and lifecycle reconciliation with all background workers.
+- Add selective memory consolidation and conflict/staleness resolution.
+- Add batch embedding/index maintenance and semantic retrieval evaluation.
+- Add specialist worker policies and permission-scoped execution through existing tools.
+- Add optional Obsidian export/views; Obsidian must never become a runtime dependency.
