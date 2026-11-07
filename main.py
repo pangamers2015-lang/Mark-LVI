@@ -649,7 +649,9 @@ class JarvisLive:
         )
         _recovered_work = work_journal.recover_interrupted()
         for _item in _recovered_work:
+            _item["notification_status"] = "pending"
             self._background_task_records[_item["id"]] = _item
+            work_journal.save_task(_item)
             try:
                 cognitive_save_checkpoint(
                     summary=f"Background task {_item.get('id')} was interrupted by an application restart.",
@@ -1048,7 +1050,6 @@ class JarvisLive:
                     live_record["notification_status"] = "delivering"
                     work_journal.save_task(live_record)
 
-                from core.background_notifications import build_task_notification
                 message = build_task_notification(task)
                 if not message:
                     with self._background_task_lock:
