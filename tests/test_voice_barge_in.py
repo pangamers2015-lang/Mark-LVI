@@ -1,4 +1,4 @@
-from core.echo import BargeInDetector
+from core.barge_in import BargeInDetector
 
 
 def test_barge_in_requires_sustained_confirmed_speech():
