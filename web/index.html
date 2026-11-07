@@ -201,6 +201,8 @@
     <div class="config-nota">O Yon utiliza o mecanismo de voz configurado no próprio backend. Você pode solicitar a reconstrução da sessão de voz ou reconfigurar os dispositivos sem trocar de interface.</div>
     <button id="yonReloadVoice" class="config-fechar" style="width:100%;height:auto;padding:12px;border:1px solid var(--linha);border-radius:8px;margin-top:12px">Recarregar sessão de voz</button>
     <button id="yonAudioDevices" class="config-fechar" style="width:100%;height:auto;padding:12px;border:1px solid var(--linha);border-radius:8px;margin-top:8px">Reconfigurar dispositivos de áudio</button>
+    <div class="config-secao" style="margin-top:22px"><span>Encerramento</span></div>
+    <button id="yonShutdown" class="config-fechar" style="width:100%;height:auto;padding:12px;border:1px solid rgba(255,110,110,.45);border-radius:8px;margin-top:8px;color:#ffaaaa">Encerrar aplicação por completo</button>
   </div>
 </div>
 
@@ -828,6 +830,24 @@
   el("yonAudioDevices").addEventListener("click", async () => {
     try { await fetch("/api/audio-device", {method:"POST"}); avisar("Solicitei a reconfiguração dos dispositivos de áudio."); }
     catch (_) { avisar("Não consegui reconfigurar o áudio."); }
+  });
+  el("yonShutdown").addEventListener("click", async () => {
+    if (!window.confirm("Deseja encerrar completamente o Yon? O áudio, a câmera, as tarefas e o servidor local serão desligados.")) return;
+    const botao = el("yonShutdown");
+    botao.disabled = true;
+    botao.textContent = "Encerrando Yon...";
+    try {
+      const resposta = await fetch("/api/encerrar", { method: "POST", keepalive: true });
+      if (!resposta.ok) throw new Error("O servidor não confirmou o encerramento.");
+      painel.hidden = true;
+      el("resposta").textContent = "Yon encerrado. Você já pode fechar esta aba.";
+      el("estadoTexto").textContent = "encerrando";
+      document.body.dataset.estado = "parado";
+    } catch (erro) {
+      botao.disabled = false;
+      botao.textContent = "Encerrar aplicação por completo";
+      avisar(erro.message || "Não foi possível encerrar o Yon.");
+    }
   });
   el("engrenagem").addEventListener("click", abrirConfig);
   el("fecharConfig").addEventListener("click", fecharConfig);
