@@ -25,6 +25,23 @@ class BackgroundNotificationTests(unittest.TestCase):
         self.assertNotIn("US$ 0.05", prompt)
         self.assertNotIn("FCC Cloud", prompt)
 
+    def test_escaped_fcc_separator_is_supported(self):
+        prompt = build_task_notification({
+            "id": "BG-0003",
+            "name": "fcc_cloud",
+            "summary": "Pesquisar uma informação",
+            "status": "completed",
+            "result": (
+                "FCC Cloud completed the task.\\n"
+                "Working directory: C:\\Yon\\project\\n"
+                "Session ID: private-session\\n"
+                "Result:\\nResultado confirmado."
+            ),
+        })
+        self.assertIn("Resultado confirmado.", prompt)
+        self.assertNotIn("private-session", prompt)
+        self.assertNotIn("Working directory", prompt)
+
     def test_failed_task_is_reported_as_failure(self):
         prompt = build_task_notification({
             "id": "BG-0002",
