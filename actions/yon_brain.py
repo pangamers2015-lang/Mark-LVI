@@ -26,6 +26,17 @@ def yon_brain(parameters: dict, player=None) -> str:
             gid=cognitive_store.save_goal(str(p.get("title","")),str(p.get("description","")),
                 int(p.get("priority",3)),"planned")
             return f"Objective created with ID {gid}." if gid else "Could not create objective."
+        if action=="goal_update":
+            gid=int(p.get("goal_id",0))
+            existing=next((g for g in cognitive_store.list_goals(include_finished=True,limit=100)
+                           if int(g["id"])==gid),None)
+            if not existing: return "Objective not found."
+            status=str(p.get("state",existing["status"])).lower()
+            title=str(p.get("title",existing["title"]))
+            description=str(p.get("description",existing["description"]))
+            priority=int(p.get("priority",existing["priority"]))
+            updated=cognitive_store.save_goal(title,description,priority,status,goal_id=gid)
+            return f"Objective {gid} updated to {status}." if updated else "Could not update objective."
         if action=="goal_list":
             goals=cognitive_store.list_goals(limit=20)
             return "Active objectives:\n"+"\n".join(
@@ -73,11 +84,11 @@ TOOL={
 "to inspect the brain."),
 "tier":"core","brief":"Stores and retrieves memories, validates evidence, and tracks objectives/checkpoints.",
 "parameters":{"type":"OBJECT","properties":{
-"action":{"type":"STRING","enum":["status","remember","search","validate","goal_add","goal_list","checkpoint","depend","index","consolidate","relate","reflect"]},
+"action":{"type":"STRING","enum":["status","remember","search","validate","goal_add","goal_update","goal_list","checkpoint","depend","index","consolidate","relate","reflect"]},
 "content":{"type":"STRING"},"level":{"type":"STRING","enum":["working","episodic","semantic","consolidated"]},
-"source":{"type":"STRING"},"state":{"type":"STRING"},"evidence":{"type":"STRING"},
+"source":{"type":"STRING"},"state":{"type":"STRING","enum":["confirmed","hypothesis","stale","contested","planned","active","blocked","completed","cancelled","in_progress"]},"evidence":{"type":"STRING"},
 "query":{"type":"STRING"},"memory_id":{"type":"INTEGER"},"title":{"type":"STRING"},
-"description":{"type":"STRING"},"priority":{"type":"INTEGER"},"goal_id":{"type":"INTEGER"},"depends_on_goal_id":{"type":"INTEGER"},
+"description":{"type":"STRING"},"priority":{"type":"INTEGER"},"goal_id":{"type":"INTEGER"},"depends_on_goal_id":{"type":"INTEGER"},"title":{"type":"STRING"},
 "summary":{"type":"STRING"},"source_id":{"type":"INTEGER"},"target_id":{"type":"INTEGER"},
 "relation":{"type":"STRING"},"next_step":{"type":"STRING"},"request":{"type":"STRING"}},
 "required":["action"]},"handler":yon_brain}
