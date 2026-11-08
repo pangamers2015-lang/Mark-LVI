@@ -20,10 +20,12 @@ ACCOUNT = "gemini-api-key"
 MODEL = "models/gemini-3.1-flash-live-preview"
 MIC_RATE = 16_000
 SPEAKER_RATE = 24_000
-CHUNK = 1_024
+CHUNK = 512  # 32 ms at 16 kHz, within Gemini Live's 20–40 ms guidance
 SYSTEM_PROMPT = (
     "Você é Jarvis, um assistente de conversa por voz. "
     "Converse em português brasileiro, de forma natural, clara e objetiva. "
+    "Mantenha respostas faladas concisas, em frases curtas e com ritmo natural. "
+    "Evite monólogos longos; faça pausas naturais e permita a alternância da conversa. "
     "Nesta versão você não possui ferramentas e não controla o computador. "
     "Se pedirem uma ação no computador, explique brevemente que essa capacidade "
     "ainda não está disponível. Não afirme que executou ações."
@@ -31,21 +33,34 @@ SYSTEM_PROMPT = (
 
 
 class AudioPlayer:
+    """Continuous PCM playback with bounded backpressure; never drops speech."""
+
+    FRAME_BYTES = 2_400  # 50 ms: 24 kHz, mono, signed 16-bit PCM
+
     def __init__(self) -> None:
-        self.chunks: queue.Queue[bytes] = queue.Queue(maxsize=80)
+        self.chunks: queue.Queue[bytes] = queue.Queue(maxsize=120)
         self.stop_event = threading.Event()
         self.thread = threading.Thread(target=self._run, daemon=True)
         self.thread.start()
 
     def put(self, data: bytes) -> None:
-        for offset in range(0, len(data), 2_400):
-            part = data[offset:offset + 2_400]
-            try:
-                self.chunks.put_nowait(part)
-            except queue.Full:
-                break
+        # Split on sample boundaries and apply backpressure instead of silently
+        # dropping new audio when the output device is temporarily slower.
+        for offset in range(0, len(data), self.FRAME_BYTES):
+            part = data[offset:offset + self.FRAME_BYTES]
+            if len(part) % 2:
+                part = part[:-1]
+            if not part:
+                continue
+            while not self.stop_event.is_set():
+                try:
+                    self.chunks.put(part, timeout=0.1)
+                    break
+                except queue.Full:
+                    continue
 
     def clear(self) -> None:
+        # Called only when Gemini reports a real barge-in interruption.
         while True:
             try:
                 self.chunks.get_nowait()
@@ -58,16 +73,20 @@ class AudioPlayer:
     def _run(self) -> None:
         try:
             with sd.RawOutputStream(
-                samplerate=SPEAKER_RATE, channels=1, dtype="int16",
-                blocksize=1_200
+                samplerate=SPEAKER_RATE,
+                channels=1,
+                dtype="int16",
+                blocksize=1_200,
+                latency="high",
             ) as stream:
                 while not self.stop_event.is_set():
                     try:
-                        stream.write(self.chunks.get(timeout=0.1))
+                        chunk = self.chunks.get(timeout=0.1)
                     except queue.Empty:
                         continue
+                    stream.write(chunk)
         except Exception as exc:
-            print(f"[audio output] {exc}")
+            print(f"[audio output] {type(exc).__name__}: {exc}")
 
 
 class JarvisApi:
@@ -195,18 +214,32 @@ class JarvisApi:
             )
 
     async def _receive_audio(self, session) -> None:
-        async for response in session.receive():
-            if self._stop.is_set():
-                return
-            content = response.server_content
-            if content and getattr(content, "interrupted", False):
-                self._player.clear()
-                self._ui("ouvindo")
-            if response.data:
-                self._player.put(response.data)
-                self._ui("falando")
-            if content and getattr(content, "turn_complete", False):
-                self._ui("ouvindo")
+        # The Live SDK receive() iterator is scoped to one model turn and can
+        # finish after turn_complete. Re-enter it for the next user turn while
+        # keeping the same Live session and microphone stream alive.
+        while not self._stop.is_set():
+            received = False
+            async for response in session.receive():
+                received = True
+                if self._stop.is_set():
+                    return
+
+                content = response.server_content
+                if content and getattr(content, "interrupted", False):
+                    # Only discard buffered speech when the server confirms
+                    # barge-in. Normal queue pressure must never drop audio.
+                    self._player.clear()
+                    self._ui("ouvindo")
+
+                if response.data:
+                    self._player.put(response.data)
+                    self._ui("falando")
+
+                if content and getattr(content, "turn_complete", False):
+                    self._ui("ouvindo")
+
+            if not received:
+                await asyncio.sleep(0.05)
 
 
 def main() -> None:
