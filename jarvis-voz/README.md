@@ -25,8 +25,8 @@ O inicializador cria o ambiente virtual local e instala as dependências de `req
 - Microsoft Edge WebView2 Runtime (normalmente já presente no Windows 10 atualizado)
 - Pacotes Python listados em `requirements.txt` (instalados pelo inicializador)
 
-É necessária uma chave da API Gemini e conexão com a internet. O uso da API pode estar sujeito às cotas e condições da conta Google.
+É necessária uma chave da API Gemini e conexão com a internet. O uso da API pode estar sujeito às cotas e condições da conta Google. O Gemini Live pode acelerar a cadência em respostas muito longas; por isso, o Jarvis está instruído a responder de forma mais concisa e conversacional.
 
 ## Observações
 
-Este primeiro pacote é um lançador de desenvolvimento. Depois de validar voz, microfone e interface no computador de destino, a etapa seguinte será empacotar a aplicação em um `.exe` independente.
+Este primeiro pacote é um lançador de desenvolvimento. A reprodução mantém uma fila de áudio com backpressure para não descartar blocos quando o dispositivo atrasa; a fila só é esvaziada quando o próprio Gemini sinaliza uma interrupção. O receptor permanece ativo entre turnos da mesma sessão. Depois de validar voz, microfone e interface no computador de destino, a etapa seguinte será empacotar a aplicação em um `.exe` independente.
