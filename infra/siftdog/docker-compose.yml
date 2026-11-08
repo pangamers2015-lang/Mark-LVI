@@ -1,0 +1,22 @@
+name: jarvis-siftdog
+
+services:
+  api:
+    image: ghcr.io/khsarvar/siftdog:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      SEARXNG_URL: http://searxng:8080
+      API_KEYS: ""
+      ANSWER_ENABLED: "false"
+    depends_on:
+      - searxng
+
+  searxng:
+    image: searxng/searxng:latest
+    restart: unless-stopped
+    volumes:
+      - ./docker/searxng/settings.yml:/etc/searxng/settings.yml:ro
+    environment:
+      SEARXNG_SECRET: jarvis-local-siftdog-change-this-secret
