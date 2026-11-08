@@ -12,12 +12,12 @@ def weather_action(parameters: dict, player=None, session_memory=None) -> str:
 
     from actions.web_search import _weather
     try:
-        msg = _weather(f"previsão do tempo para {city.strip()} {when}")
+        msg = _weather(f"previsão do tempo para {city.strip()}")
         _log(msg, player)
         if session_memory:
             try:
                 session_memory.set_last_search(
-                    query=f"previsão do tempo para {city.strip()} {when}",
+                    query=f"previsão do tempo para {city.strip()}",
                     response=msg,
                 )
             except Exception:
