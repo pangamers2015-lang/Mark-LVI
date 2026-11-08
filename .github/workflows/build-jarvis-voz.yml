@@ -1,0 +1,55 @@
+name: Build Jarvis Windows
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "jarvis-voz/**"
+      - ".github/workflows/build-jarvis-voz.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: jarvis-voz/requirements.txt
+
+      - name: Install dependencies
+        working-directory: jarvis-voz
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install pyinstaller
+
+      - name: Build standalone application
+        working-directory: jarvis-voz
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --windowed --onedir --name Jarvis --add-data "ui;ui" --collect-all google.genai --collect-all sounddevice --collect-all keyring --collect-all webview --hidden-import webview.platforms.edgechromium --hidden-import keyring.backends.Windows app.py
+          if (!(Test-Path "dist/Jarvis/Jarvis.exe")) { throw "Jarvis.exe não foi gerado." }
+          Copy-Item "README.md" "dist/Jarvis/LEIA-ME.txt"
+
+      - name: Create ZIP package
+        working-directory: jarvis-voz
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "dist/Jarvis/*" -DestinationPath "dist/Jarvis-Windows.zip" -Force
+
+      - name: Upload ZIP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Jarvis-Windows
+          path: jarvis-voz/dist/Jarvis-Windows.zip
+          if-no-files-found: error
+          retention-days: 30
