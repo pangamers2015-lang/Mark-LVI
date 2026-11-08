@@ -66,7 +66,7 @@ def _chat(messages: list[dict], *, max_tokens: int = 2200, temperature: float = 
             "top_p": 0.9,
             "max_tokens": max_tokens,
             "stream": False,
-            "extra_body": {"chat_template_kwargs": {"enable_thinking": True}},
+            "chat_template_kwargs": {"enable_thinking": True},
         },
         timeout=TIMEOUT,
     )
