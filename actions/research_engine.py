@@ -84,7 +84,7 @@ def _chat(messages: list[dict], *, max_tokens: int = 2200, temperature: float = 
 
 
 def _siftdog_search(query: str, *, deep: bool = False, limit: int = 6, topic: str = "general") -> list[dict]:
-    """Query the local, self-hosted Siftdog API (Tavily-compatible, no paid key)."""
+    """Query the local, self-hosted Siftdog API; no paid search API key is required."""
     cfg = _keys()
     base_url = str(
         os.environ.get("SIFTDOG_URL") or cfg.get("siftdog_url") or SIFTDOG_DEFAULT_URL
