@@ -104,7 +104,7 @@ def check_all() -> list[str]:
     Run all pending topic checks (once per day per topic).
     Returns a list of [MONITOR_ALERT] strings — empty if nothing new.
     """
-    from actions.web_search import _ddg_news
+    from actions.web_search import _search_open_websearch
 
     monitors = _load()
     if not monitors:
@@ -120,14 +120,19 @@ def check_all() -> list[str]:
 
         topic = data.get("topic", slug)
         try:
-            results = _ddg_news(topic, max_results=5)
-            if not results:
+            results_text = _search_open_websearch(
+                f"Notícias recentes sobre {topic}; priorize fontes atuais e informe datas",
+                limit=5,
+            )
+            # Reuse the central provider output; extract its first result and source.
+            import re
+            match = re.search(r"(?m)^1\\. (.+)$", results_text)
+            if not match:
                 monitors[slug]["last_check"] = today
                 changed = True
                 continue
 
-            top   = results[0]
-            title = top.get("title", "").strip()
+            title = match.group(1).strip()
             if not title:
                 continue
 
@@ -140,8 +145,10 @@ def check_all() -> list[str]:
 
             monitors[slug]["last_hash"] = h
 
-            snippet = top.get("snippet", "")[:150]
-            source  = top.get("source", "")
+            snippet_match = re.search(r"(?m)^   (?!Mecanismo:|Fonte:)(.+)$", results_text)
+            source_match = re.search(r"(?m)^   Fonte: (.+)$", results_text)
+            snippet = snippet_match.group(1)[:150] if snippet_match else ""
+            source = source_match.group(1) if source_match else ""
             parts   = [f"[MONITOR_ALERT] {topic}", f"Headline: {title}"]
             if snippet:
                 parts.append(snippet)
