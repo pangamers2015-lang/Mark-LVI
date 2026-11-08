@@ -797,7 +797,7 @@ class _ReasoningFilter:
     """Removes a reasoning model's private thinking from what gets said.
 
     WHY THIS IS NOT OPTIONAL FOR LOCAL MODELS
-        The models people actually run at home — qwen3, deepseek-r1, and every
+        The reasoning models people actually run at home — deepseek-r1 and every
         distill of them — think out loud before answering, inside
         `<think>...</think>`. Several servers pass that straight through as
         ordinary content.
