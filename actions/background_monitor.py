@@ -12,7 +12,7 @@ from datetime import datetime
 _BLOCKED = {
     "bitcoin", "ethereum", "dogecoin", "solana", "binance", "nft",
     "blockchain", "defi", "altcoin", "memecoin", "coin", "token",
-    "crypto", "kripto", "cripto", "krypto", "крипто", "仮仮想通貨",
+    "crypto", "kripto", "cripto", "krypto", "крипто", "仮想通貨",
     "cryptocurrency",
 }
 
