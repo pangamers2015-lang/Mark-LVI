@@ -2643,8 +2643,14 @@ class JarvisLive:
     # ── Morning briefing ────────────────────────────────────────────────────────
 
     async def _send_startup_briefing(self) -> None:
-        """Deliver the startup greeting and any verified one-time GitHub inbox instructions."""
+        """Deliver the startup greeting and pending one-time capability announcements."""
         inbox_directives = []
+        startup_announcements = []
+        try:
+            from core.startup_announcements import pending_announcements
+            startup_announcements = await asyncio.to_thread(pending_announcements)
+        except Exception as exc:
+            print(f"[Startup] One-time announcements unavailable: {type(exc).__name__}: {exc}")
         try:
             from memory.github_inbox import process_inbox, pending_startup_directives
             result = await asyncio.to_thread(process_inbox)
@@ -2719,6 +2725,16 @@ class JarvisLive:
         instructions.append("Keep it to 1 or 2 short sentences. Do not call tools.")
         if inbox_directives:
             instructions.append("Execute these user-approved one-time startup instructions naturally in this startup greeting. The one-time instruction overrides the normal greeting length limit as needed. Do not call tools or perform unrelated operations: " + " | ".join(item["instruction"] for item in inbox_directives))
+        if startup_announcements:
+            instructions.append(
+                "Naturally tell the user about these newly added capabilities exactly once. "
+                "Explain their practical purpose briefly, preserve any stated validation caveat, "
+                "and do not claim a test passed unless the announcement explicitly says so: "
+                + " | ".join(
+                    f"{item.get('title', 'New capability')}: {item.get('message', '')}"
+                    for item in startup_announcements
+                )
+            )
         p1 = " ".join(instructions) + session_clause + lang_clause + name_clause
 
         if self._turn_done_event:
@@ -2732,6 +2748,16 @@ class JarvisLive:
             from memory.github_inbox import mark_startup_delivered
             delivered = await asyncio.to_thread(mark_startup_delivered, [item["id"] for item in inbox_directives])
             print(f"[YonInbox] Delivered {delivered} one-time startup instruction(s).")
+        if startup_announcements:
+            try:
+                from core.startup_announcements import mark_announcements_delivered
+                delivered = await asyncio.to_thread(
+                    mark_announcements_delivered,
+                    [item["id"] for item in startup_announcements],
+                )
+                print(f"[Startup] Delivered {delivered} one-time capability announcement(s).")
+            except Exception as exc:
+                print(f"[Startup] Could not mark announcements delivered: {type(exc).__name__}: {exc}")
         print("[JARVIS] Startup greeting sent using saved behavior preferences.")
 
         # The greeting remains, but the news phase is skipped when disabled.
