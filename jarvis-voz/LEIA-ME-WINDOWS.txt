@@ -1,0 +1,23 @@
+JARVIS - PACOTE WINDOWS
+
+USO NORMAL
+1. Extraia o arquivo ZIP.
+2. Abra a pasta Jarvis.
+3. Execute Jarvis.exe.
+4. Na primeira inicializacao, informe sua chave da API Gemini.
+5. Permita o acesso ao microfone.
+
+A chave e armazenada no Gerenciador de Credenciais do Windows.
+
+INSTALADOR DE DEPENDENCIAS
+O arquivo INSTALAR_DEPENDENCIAS.bat prepara um ambiente Python para executar
+ou modificar o codigo-fonte. Ele nao e necessario para usar o executavel
+ja compilado.
+
+VOZ
+Gemini Live, voz masculina Algieba (suave), idioma de conversa portugues
+brasileiro. O microfone e a saida de audio precisam estar habilitados.
+
+REQUISITOS
+Windows 10/11 x64, internet, chave Gemini com acesso ao modelo Live,
+microfone, alto-falantes/fone e Microsoft Edge WebView2 Runtime.
