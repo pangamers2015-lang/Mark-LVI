@@ -267,7 +267,7 @@ PESQUISA WEB NATIVA — PRIMEIRO TESTE DE REFERENCIA DO SIFTDOG (DECISAO DE 07/1
 
 IMPLEMENTACAO DO AVISO UNICO DE PRIMEIRA INICIALIZACAO (07/11/2026)
 - Implementado no codigo raiz: core/startup_announcements.py mantem avisos persistentes em memory/startup_announcements.json, permite registrar futuras capacidades e evita duplicar avisos pelo identificador.
-- Implementado em main.py: o briefing de inicializacao consulta avisos pendentes e os inclui na primeira fala do Jarvis. O aviso so e marcado como entregue depois que a saudacao e enviada com sucesso; se o briefing estiver desativado ou falhar, permanece pendente.
+- Implementado em main.py: a inicializacao consulta avisos pendentes e os inclui na primeira fala do Jarvis. O aviso e entregue mesmo se o briefing matinal opcional estiver desativado; nesse caso, apenas o aviso e falado, sem consumir o resumo da sessao anterior. O aviso so e marcado como entregue depois que a fala e enviada com sucesso; se a sessao nao estiver pronta ou houver falha, permanece pendente.
 - Aviso inicial cadastrado: explicar que a pesquisa web nativa foi integrada ao Siftdog e que o Nemotron planeja/sintetiza as fontes, sem alegar que o teste operacional foi aprovado.
-- Comportamento esperado: o aviso Siftdog e falado uma unica vez. Nas inicializacoes seguintes, o Jarvis continua usando o resumo da sessao anterior; futuras capacidades podem registrar novos avisos independentes, que serao falados uma vez cada.
+- Comportamento esperado: o aviso Siftdog e falado uma unica vez. Nas inicializacoes seguintes, o Jarvis continua usando o resumo da sessao anterior; cada nova integracao/capacidade deve chamar register_announcement com um identificador proprio para gerar seu aviso unico, sem repetir os anteriores.
 - Testes automatizados escritos em tests/test_startup_announcements.py para entrega unica e deduplicacao. Execucao desses testes ainda pendente; nao declarar validado ate executa-los no ambiente do projeto.
