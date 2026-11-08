@@ -257,10 +257,17 @@ Objetivo: ao abrir o Jarvis e iniciar a primeira interacao de uma nova sessao, e
 - Criterio de aceite: realizar implementacoes e testes com o Jarvis offline, fechar e reabrir uma sessao, e demonstrar que a primeira interacao apresenta corretamente um resumo verificavel, sem inventar resultados e sem perder eventos.
 
 PESQUISA WEB NATIVA — PRIMEIRO TESTE DE REFERENCIA DO SIFTDOG (DECISAO DE 07/11/2026)
-- O mecanismo Siftdog foi adicionado ao codigo e a infraestrutura Docker Compose foi preparada, mas a instalacao e a validacao real da API local dependem da instalacao/inicializacao do Docker Desktop e dos servicos no computador do usuario.
+- O mecanismo Siftdog foi adicionado ao codigo e a infraestrutura Docker Compose foi preparada. O usuario informou que a instalacao local ja foi realizada; ainda e necessario registrar evidencias de uma pesquisa real pela API local e de um teste ponta a ponta pelo Jarvis.
 - Pesquisa web preliminar realizada para validar a documentacao e o contrato esperado: Siftdog oferece API compativel com os endpoints /search, /extract, /crawl e /map; usa SearXNG para pesquisa, trafilatura para extracao e BM25 para ranking; nao exige chave de busca paga. Fontes consultadas: site oficial https://siftdog.com/ e repositorio https://github.com/khsarvar/siftdog.
 - SearXNG fornece pesquisa agregada por mecanismos publicos e pode sofrer limitacao, CAPTCHA ou indisponibilidade temporaria dos mecanismos. Portanto, nao prometer disponibilidade ou pesquisas ilimitadas sem validacao operacional.
 - Primeiro teste operacional apos instalacao: consultar uma pergunta objetiva pelo endpoint local /search, verificar HTTP 200, quantidade de resultados, titulo, URL, conteudo, relevancia e tempo de resposta; em seguida testar /extract com uma URL retornada e confirmar conteudo extraido.
 - Repetir o mesmo caso de teste atraves do fluxo de pesquisa do Jarvis para confirmar integracao ponta a ponta com LangGraph e sintese do Nemotron. Registrar consulta, fontes, duracao, resultado e erros no historico de eventos.
 - Estado atual deste teste: PESQUISA DOCUMENTAL PRELIMINAR CONCLUIDA; API LOCAL NAO TESTADA; TESTE PONTA A PONTA PENDENTE DE INSTALACAO.
 
+
+IMPLEMENTACAO DO AVISO UNICO DE PRIMEIRA INICIALIZACAO (07/11/2026)
+- Implementado no codigo raiz: core/startup_announcements.py mantem avisos persistentes em memory/startup_announcements.json, permite registrar futuras capacidades e evita duplicar avisos pelo identificador.
+- Implementado em main.py: o briefing de inicializacao consulta avisos pendentes e os inclui na primeira fala do Jarvis. O aviso so e marcado como entregue depois que a saudacao e enviada com sucesso; se o briefing estiver desativado ou falhar, permanece pendente.
+- Aviso inicial cadastrado: explicar que a pesquisa web nativa foi integrada ao Siftdog e que o Nemotron planeja/sintetiza as fontes, sem alegar que o teste operacional foi aprovado.
+- Comportamento esperado: o aviso Siftdog e falado uma unica vez. Nas inicializacoes seguintes, o Jarvis continua usando o resumo da sessao anterior; futuras capacidades podem registrar novos avisos independentes, que serao falados uma vez cada.
+- Testes automatizados escritos em tests/test_startup_announcements.py para entrega unica e deduplicacao. Execucao desses testes ainda pendente; nao declarar validado ate executa-los no ambiente do projeto.
