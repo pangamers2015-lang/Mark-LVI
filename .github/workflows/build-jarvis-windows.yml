@@ -1,0 +1,60 @@
+name: Build Jarvis Windows
+
+on:
+  push:
+    branches: [release/jarvis-orb-windows]
+    paths:
+      - "jarvis-voz/**"
+      - ".github/workflows/build-jarvis-windows.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          architecture: "x64"
+
+      - name: Install dependencies
+        working-directory: jarvis-voz
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: Build desktop executable
+        working-directory: jarvis-voz
+        run: pyinstaller --clean --noconfirm Jarvis.spec
+
+      - name: Assemble portable folder
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force package/Jarvis | Out-Null
+          Copy-Item -Recurse jarvis-voz/dist/Jarvis/* package/Jarvis/
+          Copy-Item jarvis-voz/INICIAR_JARVIS.bat package/
+          Copy-Item jarvis-voz/INSTALAR_DEPENDENCIAS.bat package/
+          Copy-Item jarvis-voz/requirements.txt package/
+          @'
+          JARVIS - VERSAO WINDOWS
+          1. Extraia a pasta do ZIP.
+          2. Abra Jarvis.exe dentro da pasta Jarvis.
+          3. Na primeira abertura, informe sua chave Gemini.
+          O arquivo INSTALAR_DEPENDENCIAS.bat e destinado ao modo de desenvolvimento.
+          '@ | Set-Content package/LEIA-ME.txt -Encoding UTF8
+          Compress-Archive -Path package/* -DestinationPath Jarvis-Windows.zip
+
+      - name: Upload portable package
+        uses: actions/upload-artifact@v4
+        with:
+          name: Jarvis-Windows
+          path: Jarvis-Windows.zip
+          if-no-files-found: error
+          retention-days: 30
