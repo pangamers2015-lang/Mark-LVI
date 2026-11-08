@@ -81,7 +81,7 @@ class _MockServer(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
-        self._json({"data": [{"id": "qwen3:8b"}, {"id": "gemma3:4b"}]})
+        self._json({"data": [{"id": "llama3:8b"}, {"id": "gemma3:4b"}]})
 
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
@@ -307,7 +307,7 @@ async def test_full_stack_over_http():
     srv = start_server()
     try:
         llm = OpenAICompatLLM({"base_url": f"http://127.0.0.1:{srv.server_port}",
-                               "model": "qwen3:8b"})
+                               "model": "llama3:8b"})
         eng = PipelineEngine(llm, config=Cfg())
         said, ran = [], []
 
@@ -375,7 +375,7 @@ def test_vision_is_asked_not_guessed():
               (time.monotonic() - t0) < 0.05)
 
         changed = OpenAICompatLLM({"base_url": f"http://127.0.0.1:{srv.server_port}",
-                                   "model": "qwen3:8b", "vision": "1",
+                                   "model": "llama3:8b", "vision": "1",
                                    "vision_model": "llava:7b"})
         check("changing the model re-measures it",
               changed._vision_known == "", changed._vision_known)
@@ -678,7 +678,7 @@ async def test_a_tool_is_not_run_twice():
     # A model that keeps asking for the same thing, for ever.
     class Stubborn:
         caps = {"tools": True, "tool_format": "openai", "vision": False}
-        model = "qwen3:8b"
+        model = "llama3:8b"
 
         def __init__(self):
             self.rounds = 0
@@ -836,7 +836,7 @@ def test_what_reaches_the_voice():
 
 
 def test_reasoning_is_not_read_aloud():
-    """qwen3, deepseek-r1 and every distill of them think inside <think> tags,
+    """deepseek-r1 and other distill of them think inside <think> tags,
     and several servers pass that through as ordinary content."""
     import random
 
@@ -1017,10 +1017,10 @@ def test_panel_settings_survive():
 
         # -- typing survives a redraw ----------------------------------------
         if OLLAMA in ov._edits:
-            ov._edits[OLLAMA]["model"][0].setCurrentText("qwen3:8b")
+            ov._edits[OLLAMA]["model"][0].setCurrentText("llama3:8b")
             ov._rebuild_body()
             check("a typed model survives a redraw",
-                  get_provider_config(OLLAMA).get("model") == "qwen3:8b",
+                  get_provider_config(OLLAMA).get("model") == "llama3:8b",
                   str(get_provider_config(OLLAMA).get("model")))
 
         # -- the whole setup round-trips -------------------------------------
