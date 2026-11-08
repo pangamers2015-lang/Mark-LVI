@@ -1,6 +1,6 @@
 """
 BackgroundMonitor — user-configured topic watching.
-Uses the Jarvis native research provider (Tavily) once per day per topic.
+Uses the Jarvis native research provider (self-hosted Siftdog) once per day per topic.
 No crypto, no finance, no uninvited tracking.
 """
 import hashlib
