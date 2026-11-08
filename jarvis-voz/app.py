@@ -6,6 +6,7 @@ import queue
 import threading
 import time
 from pathlib import Path
+import sys
 
 import keyring
 import sounddevice as sd
@@ -13,7 +14,7 @@ import webview
 from google import genai
 from google.genai import types
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
 UI = ROOT / "ui" / "index.html"
 SERVICE = "JarvisVoice"
 ACCOUNT = "gemini-api-key"
