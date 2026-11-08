@@ -240,3 +240,27 @@ SEQUENCIAMENTO E REGRA DE PLANEJAMENTO
 - Projetar cada nova arquitetura considerando desde o inicio recursos de hardware, dependencias, observabilidade, recuperacao, versionamento, memoria, seguranca operacional e custo de modelos.
 - Nao exigir a escolha antecipada das versoes exatas dos provedores para concluir o desenho estrutural. Definir os detalhes concretos na fase de integracao e validacao.
 - Manter o cronograma em nivel de fases ate que as escolhas tecnologicas e os testes de compatibilidade permitam estimar duracoes realistas.
+
+RELATORIO PROATIVO DE SESSAO E PRESTACAO DE CONTAS AO USUARIO (REQUISITO TRANSVERSAL — DECISAO DE 07/11/2026)
+Objetivo: ao abrir o Jarvis e iniciar a primeira interacao de uma nova sessao, ele deve informar espontaneamente o que aconteceu desde a ultima sessao, especialmente implementacoes, testes, pesquisa, tarefas offline e pendencias. O usuario nao deve precisar perguntar o que foi feito.
+
+- Registrar eventos de trabalho localmente, mesmo sem internet ou sem o cerebro central disponivel: inicio/fim de tarefa, implementacoes, arquivos e componentes alterados, agente responsavel, commits quando houver, testes executados, resultados, erros, decisoes e pendencias.
+- O registro local e estruturado e persistente; nao depende de inferencia posterior do modelo nem de conectividade com provedores.
+- Na primeira interacao de cada nova sessao, o cerebro central consulta os registros desde o ultimo resumo apresentado e produz um relato curto, claro e falado por voz quando a interface de voz estiver disponivel; se nao, apresenta por texto.
+- O relato deve destacar: o que foi concluido, o que foi implementado offline, o que foi pesquisado, o que foi testado e com qual resultado, o que falhou ou ficou pendente e qual e a proxima etapa recomendada.
+- Distinguir explicitamente codigo implementado, testes escritos, testes realmente executados, testes aprovados e validacao em ambiente real. Nunca dizer que uma capacidade funciona apenas porque o codigo foi adicionado.
+- Identificar contribuicoes por agente e consolidar o resultado sem despejar logs tecnicos ou detalhes internos desnecessarios. Disponibilizar evidencias e detalhes sob solicitacao.
+- Se o Jarvis esteve offline, apresentar na primeira conversa apos a retomada um resumo das atividades registradas localmente e indicar quais dependiam de internet ou de APIs externas.
+- Manter um cursor/identificador da ultima sessao relatada para evitar repetir indefinidamente o mesmo historico; nao descartar eventos ainda nao relatados se o cerebro estiver indisponivel.
+- O cerebro central interpreta e comunica o relatorio, mas a coleta de eventos e o armazenamento devem funcionar independentemente dele. Assim, o recurso basico de auditoria continua ativo durante indisponibilidade do modelo.
+- Este requisito e transversal e deve ser considerado no desenho da Fase 1 (registro local), Fase 3 (interpretacao pelo cerebro), Fase 5 (memoria/contexto), Fase 8 (apresentacao por voz/texto) e Fase 9 (tarefas autonomas e retomada).
+- Criterio de aceite: realizar implementacoes e testes com o Jarvis offline, fechar e reabrir uma sessao, e demonstrar que a primeira interacao apresenta corretamente um resumo verificavel, sem inventar resultados e sem perder eventos.
+
+PESQUISA WEB NATIVA — PRIMEIRO TESTE DE REFERENCIA DO SIFTDOG (DECISAO DE 07/11/2026)
+- O mecanismo Siftdog foi adicionado ao codigo e a infraestrutura Docker Compose foi preparada, mas a instalacao e a validacao real da API local dependem da instalacao/inicializacao do Docker Desktop e dos servicos no computador do usuario.
+- Pesquisa web preliminar realizada para validar a documentacao e o contrato esperado: Siftdog oferece API compativel com os endpoints /search, /extract, /crawl e /map; usa SearXNG para pesquisa, trafilatura para extracao e BM25 para ranking; nao exige chave de busca paga. Fontes consultadas: site oficial https://siftdog.com/ e repositorio https://github.com/khsarvar/siftdog.
+- SearXNG fornece pesquisa agregada por mecanismos publicos e pode sofrer limitacao, CAPTCHA ou indisponibilidade temporaria dos mecanismos. Portanto, nao prometer disponibilidade ou pesquisas ilimitadas sem validacao operacional.
+- Primeiro teste operacional apos instalacao: consultar uma pergunta objetiva pelo endpoint local /search, verificar HTTP 200, quantidade de resultados, titulo, URL, conteudo, relevancia e tempo de resposta; em seguida testar /extract com uma URL retornada e confirmar conteudo extraido.
+- Repetir o mesmo caso de teste atraves do fluxo de pesquisa do Jarvis para confirmar integracao ponta a ponta com LangGraph e sintese do Nemotron. Registrar consulta, fontes, duracao, resultado e erros no historico de eventos.
+- Estado atual deste teste: PESQUISA DOCUMENTAL PRELIMINAR CONCLUIDA; API LOCAL NAO TESTADA; TESTE PONTA A PONTA PENDENTE DE INSTALACAO.
+
