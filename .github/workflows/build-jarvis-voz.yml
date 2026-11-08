@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -53,3 +53,12 @@ jobs:
           path: jarvis-voz/dist/Jarvis-Windows.zip
           if-no-files-found: error
           retention-days: 30
+
+      - name: Publish downloadable ZIP release
+        working-directory: jarvis-voz
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "jarvis-voz-$env:GITHUB_SHA"
+          gh release create $tag "dist/Jarvis-Windows.zip" --title "Jarvis Windows" --notes "Aplicativo desktop independente com Gemini Live e voz masculina Algieba." --latest
