@@ -2642,7 +2642,7 @@ class JarvisLive:
 
     # ── Morning briefing ────────────────────────────────────────────────────────
 
-    async def _send_startup_briefing(self) -> None:
+    async def _send_startup_briefing(self, announcement_only: bool = False) -> None:
         """Deliver the startup greeting and pending one-time capability announcements."""
         inbox_directives = []
         startup_announcements = []
@@ -2671,8 +2671,8 @@ class JarvisLive:
 
         lang = _val("language")
         name = _val("name")
-        announce_time = behavior["announce_time_at_startup"]
-        deliver_news = behavior["deliver_news_at_startup"]
+        announce_time = behavior["announce_time_at_startup"] and not announcement_only
+        deliver_news = behavior["deliver_news_at_startup"] and not announcement_only
         greeting_style = behavior.get("startup_greeting_style", "").strip()
         time_str = datetime.now().strftime("%H:%M") if announce_time else ""
 
@@ -2697,7 +2697,7 @@ class JarvisLive:
         name_clause = f" Address the user as {name}." if name else ""
 
         # Include previous-session context only when it exists.
-        last = await asyncio.to_thread(pop_last_session)
+        last = None if announcement_only else await asyncio.to_thread(pop_last_session)
         session_clause = ""
         if last:
             try:
@@ -3453,12 +3453,22 @@ class JarvisLive:
                     if self._engine is not None:
                         tg.create_task(self._engine.warmup())
 
-                    # Morning briefing — fires once per process launch (if enabled).
-                    # Skipped in wake-word mode: it comes up asleep, and a briefing
-                    # would mean talking while "asleep".
-                    if not self._briefing_sent and get_brief_enabled() and self._awake:
+                    # Startup announcements are mandatory once, even when the
+                    # optional morning briefing is disabled. In that case deliver
+                    # only the pending notice: do not announce time/news or consume
+                    # the previous-session summary.
+                    pending_startup_notice = False
+                    try:
+                        from core.startup_announcements import pending_announcements
+                        pending_startup_notice = bool(await asyncio.to_thread(pending_announcements))
+                    except Exception as exc:
+                        print(f"[Startup] Could not check one-time announcements: {type(exc).__name__}: {exc}")
+                    briefing_enabled = get_brief_enabled()
+                    if not self._briefing_sent and (briefing_enabled or pending_startup_notice) and self._awake:
                         self._briefing_sent = True
-                        tg.create_task(self._send_startup_briefing())
+                        tg.create_task(self._send_startup_briefing(
+                            announcement_only=not briefing_enabled and pending_startup_notice
+                        ))
 
             except KeyboardInterrupt:
                 raise
