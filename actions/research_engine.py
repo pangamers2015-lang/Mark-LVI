@@ -217,9 +217,15 @@ def _deep_search(state: ResearchState) -> dict:
     # Bounded parallel workers: one Tavily provider, several independent research angles.
     with ThreadPoolExecutor(max_workers=min(4, len(queries))) as pool:
         futures = {pool.submit(_tavily_search, q, deep=True, limit=5): q for q in queries}
+        failures = []
         for future in as_completed(futures):
-            gathered.extend(future.result())
+            try:
+                gathered.extend(future.result())
+            except Exception as exc:
+                failures.append(str(exc))
     results = _dedupe(gathered)[:12]
+    if not results and failures:
+        raise RuntimeError("Todas as consultas de pesquisa falharam: " + "; ".join(failures[:2]))
     if not results:
         raise RuntimeError("Tavily não encontrou fontes para a pesquisa aprofundada.")
     with ThreadPoolExecutor(max_workers=6) as pool:
