@@ -99,7 +99,7 @@ def _tavily_search(query: str, *, deep: bool = False, limit: int = 6) -> list[di
             "topic": "general",
             "max_results": max(1, min(limit, 10)),
             "include_answer": False,
-            "include_raw_content": True,
+            "include_raw_content": "markdown",
         },
         timeout=TIMEOUT,
     )
@@ -154,7 +154,7 @@ def _dedupe(items: list[dict]) -> list[dict]:
 
 
 def _orchestrate(state: ResearchState) -> dict:
-    mode = state.get("mode", "search").lower()
+    mode = state.get("mode", "auto").lower()
     query = state["query"]
     deep = mode in {"research", "deep"}
     if mode == "auto":
