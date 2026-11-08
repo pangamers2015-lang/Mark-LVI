@@ -14,7 +14,7 @@ Supports two backends — selected via  "llm_provider"  in config/api_keys.json:
         LM Studio download: https://lmstudio.ai   (default port: 1234)
         Set  "llm_url": "http://localhost:1234"  in config.
         Note: tool-calling support depends on the model; use a model that
-        supports function/tool calls (e.g. Qwen2.5, Llama-3.1, Mistral).
+        supports function/tool calls (e.g. Llama-3.1, Mistral).
 """
 import json
 import re
