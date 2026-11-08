@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>JARVIS</title>
+<style>
+:root{color-scheme:dark;font-family:Inter,"Segoe UI",sans-serif;background:#000;color:#fff}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#000}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
+#status{position:fixed;bottom:34px;left:0;right:0;text-align:center;color:rgba(255,255,255,.42);font-size:10px;letter-spacing:.28em;text-transform:uppercase;pointer-events:none}
+#setup{position:fixed;inset:0;display:grid;place-items:center;background:rgba(0,0,0,.78);backdrop-filter:blur(12px)}
+#setup[hidden]{display:none}
+.panel{width:min(420px,calc(100vw - 36px));padding:26px;border:1px solid #ffffff25;border-radius:16px;background:#0b0b0d;box-shadow:0 24px 80px #000}
+h1{font-size:13px;letter-spacing:.3em;font-weight:600;margin:0 0 12px}
+p{font-size:13px;line-height:1.6;color:#aaa}
+input{width:100%;padding:13px;border:1px solid #ffffff30;border-radius:9px;background:#050505;color:#fff;font:inherit;outline:none}
+button{width:100%;margin-top:14px;padding:12px;border:0;border-radius:9px;background:#fff;color:#000;font:inherit;font-weight:600;cursor:pointer}
+#err{min-height:18px;color:#ff9b9b;font-size:12px}
+</style>
+</head>
+<body>
+<canvas id="orb" aria-label="Orb do Jarvis"></canvas>
+<div id="status">INICIANDO</div>
+<div id="setup" hidden>
+  <section class="panel">
+    <h1>CONFIGURAÇÃO INICIAL</h1>
+    <p>Informe sua chave da API Gemini para ativar a conversa por voz. Ela será guardada no Gerenciador de Credenciais do Windows, não nesta pasta.</p>
+    <input id="key" type="password" autocomplete="off" placeholder="Chave da API Gemini">
+    <button id="save">Conectar</button>
+    <div id="err"></div>
+  </section>
+</div>
+<script>
+(() => {
+  const canvas=document.getElementById("orb"),ctx=canvas.getContext("2d");
+  const status=document.getElementById("status");
+  const setup=document.getElementById("setup");
+  const points=[];
+  const N=2400;
+  let w=0,h=0,rotation=0,speed=.0024,level=0,target=0,state="iniciando";
+  for(let i=0;i<N;i++){
+    const y=1-(i/(N-1))*2,r=Math.sqrt(1-y*y),a=i*2.399963229728653;
+    points.push([Math.cos(a)*r,y,Math.sin(a)*r,Math.random()*Math.PI*2]);
+  }
+  function resize(){
+    const d=Math.min(2,devicePixelRatio||1);w=innerWidth;h=innerHeight;
+    canvas.width=w*d;canvas.height=h*d;ctx.setTransform(d,0,0,d,0,0);
+  }
+  addEventListener("resize",resize);resize();
+  function animate(now){
+    const t=now/1000;
+    target=state==="falando"?.48:state==="ouvindo"?.18:state==="pensando"?.23:.055;
+    level+=(target-level)*.08;
+    const desired=state==="pensando"?.014:state==="falando"?.006:.0024;
+    speed+=(desired-speed)*.04;rotation+=speed;
+    ctx.clearRect(0,0,w,h);
+    const cx=w/2,cy=h*.43,R=Math.min(w,h)*.2*(1+level*.3);
+    const glow=ctx.createRadialGradient(cx,cy,R*.05,cx,cy,R*2.1);
+    glow.addColorStop(0,"rgba(255,255,255,"+(.09+level*.22)+")");
+    glow.addColorStop(.4,"rgba(255,255,255,"+(.025+level*.05)+")");
+    glow.addColorStop(1,"rgba(255,255,255,0)");
+    ctx.fillStyle=glow;ctx.fillRect(0,0,w,h);
+    const cr=Math.cos(rotation),sr=Math.sin(rotation),inc=.42,ci=Math.cos(inc),si=Math.sin(inc);
+    for(const p of points){
+      const wave=1+level*.5*Math.sin(p[3]+t*6+p[1]*5);
+      const x=p[0]*wave,y=p[1]*wave,z=p[2]*wave;
+      const x1=x*cr+z*sr,z1=-x*sr+z*cr,y1=y*ci-z1*si,z2=y*si+z1*ci;
+      const depth=(z2+1.3)/2.6,scale=1.4/(1.9-z2*.5),size=(.55+1.35*depth)*(1+level*.35);
+      ctx.globalAlpha=Math.max(.04,Math.min(1,.06+.9*depth*depth));
+      ctx.fillStyle="#fff";ctx.fillRect(cx+x1*R*scale-size/2,cy+y1*R*scale-size/2,size,size);
+    }
+    ctx.globalAlpha=1;requestAnimationFrame(animate);
+  }
+  requestAnimationFrame(animate);
+  window.jarvisState=(next)=>{state=next;status.textContent=({iniciando:"INICIANDO",ouvindo:"OUVINDO",pensando:"PENSANDO",falando:"FALANDO",erro:"VOZ INDISPONÍVEL"})[next]||next.toUpperCase();};
+  window.addEventListener("pywebviewready",async()=>{
+    try{
+      const ready=await window.pywebview.api.has_key();
+      if(!ready){setup.hidden=false;jarvisState("erro");}
+      else await window.pywebview.api.start();
+    }catch(e){jarvisState("erro");}
+  });
+  document.getElementById("save").addEventListener("click",async()=>{
+    const key=document.getElementById("key").value.trim(),err=document.getElementById("err");
+    if(!key){err.textContent="Informe a chave Gemini.";return;}
+    err.textContent="Salvando e conectando…";
+    try{
+      await window.pywebview.api.save_key(key);
+      document.getElementById("key").value="";setup.hidden=true;
+      await window.pywebview.api.start();
+    }catch(e){err.textContent=String(e);}
+  });
+})();
+</script>
+</body>
+</html>
