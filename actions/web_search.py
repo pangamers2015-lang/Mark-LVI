@@ -64,6 +64,17 @@ def _weather(query: str) -> str:
     return "\n".join(lines)
 
 
+def _news(query: str = "") -> str:
+    from actions.research_engine import research
+    from datetime import datetime
+    topic = query.strip() or "principais notícias atuais do Brasil e do mundo"
+    return research(
+        f"Notícias publicadas hoje ou nos últimos dias até {datetime.now().astimezone():%d/%m/%Y}: {topic}. "
+        "Priorize fontes primárias, informe datas e diferencie data do evento da publicação.",
+        mode="search",
+    )
+
+
 def web_search(parameters: dict, response=None, player=None, session_memory=None) -> str:
     params = parameters or {}
     query = str(params.get("query") or "").strip()
