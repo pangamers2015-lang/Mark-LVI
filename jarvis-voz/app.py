@@ -232,7 +232,7 @@ class JarvisApi:
                     self._ui("ouvindo")
 
                 if response.data:
-                    self._player.put(response.data)
+                    await asyncio.to_thread(self._player.put, response.data)
                     self._ui("falando")
 
                 if content and getattr(content, "turn_complete", False):
