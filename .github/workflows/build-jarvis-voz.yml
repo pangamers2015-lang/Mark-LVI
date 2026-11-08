@@ -36,7 +36,7 @@ jobs:
         working-directory: jarvis-voz
         shell: pwsh
         run: |
-          pyinstaller --noconfirm --clean --windowed --onedir --name Jarvis --add-data "ui;ui" --collect-all google.genai --collect-all sounddevice --collect-all keyring --collect-all webview --hidden-import webview.platforms.edgechromium --hidden-import keyring.backends.Windows app.py
+          pyinstaller --noconfirm --clean --windowed --onedir --name Jarvis --add-data "ui;ui" --collect-all google.genai --collect-all sounddevice --collect-all keyring --collect-all webview --collect-all pythonnet --hidden-import clr --hidden-import System --hidden-import webview.platforms.edgechromium --hidden-import keyring.backends.Windows app.py
           if (!(Test-Path "dist/Jarvis/Jarvis.exe")) { throw "Jarvis.exe não foi gerado." }
           Copy-Item "README.md" "dist/Jarvis/LEIA-ME.txt"
 
