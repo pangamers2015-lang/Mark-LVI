@@ -167,7 +167,7 @@ class JarvisApi:
                         )
                         done, pending = await asyncio.wait(
                             {sender, receiver},
-                            return_when=asyncio.FIRST_EXCEPTION
+                            return_when=asyncio.FIRST_COMPLETED
                         )
                         for task in pending:
                             task.cancel()
