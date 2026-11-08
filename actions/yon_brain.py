@@ -89,52 +89,6 @@ def yon_brain(parameters: dict, player=None) -> str:
             return (f"Exported {result.get('memory_count',0)} memories, {result.get('relationship_count',0)} relationships and "
                 f"{result.get('goal_count',0)} objectives to the configured Obsidian vault: "
                 +", ".join(result.get("files",[])))
-        if action=="local_status":
-            from core.cognitive_models import ollama_status
-            result=ollama_status()
-            if not result.get("available"):
-                return ("Local Ollama unavailable. Start/install Ollama and ensure its local service "
-                    "is running. Details: "+str(result.get("error","No response from Ollama.")))
-            installed="yes" if result.get("configured_model_installed") else "no"
-            return (f"Ollama available at {result.get('base_url')}; "
-                f"configured model={result.get('configured_model')}; installed={installed}; "
-                f"installed models={', '.join(result.get('models',[])) or 'none'}.")
-        if action=="consult_local":
-            from core.cognitive_models import ollama_chat
-            prompt=str(p.get("prompt","")).strip()
-            if not prompt:
-                return "A specific task or question is required for local consultation."
-
-            # Keep the default handoff task-focused. The previous implementation
-            # injected the entire recent conversation, learning store, cognitive
-            # state and specialist protocol into a small 4B model, which could
-            # distract it from short or exact-output assignments.
-            full_prompt=prompt
-            if bool(p.get("use_memory_context",False)):
-                hits=brain.retrieve(prompt,limit=3,semantic=False)
-                if hits:
-                    memory_lines=[
-                        f"- [{item.get('level','?')} | {item.get('state','?')}] "
-                        f"{str(item.get('content',''))[:400]}"
-                        for item in hits
-                    ]
-                    memory_context="\n".join(memory_lines)[:1200]
-                    full_prompt=(
-                        "[OPTIONAL RELEVANT YON MEMORY — use only if directly useful]\n"
-                        +memory_context+"\n\n[ASSIGNMENT]\n"+prompt
-                    )
-
-            result=ollama_chat(full_prompt,model=str(p.get("model","") or "") or None,
-                profile=str(p.get("response_profile","compact") or "compact"))
-            if not result.get("ok"):
-                return "Local model unavailable: "+str(result.get("error","Unknown error"))
-            response=str(result.get("response","")).strip()
-            if not response:
-                return "Local model returned an empty response; no result was passed to the coordinator."
-            return ("[QWEN_RESULT — UNVERIFIED]\n"
-                f"{response}\n"
-                "[COORDINATOR] Evaluate this result independently. Verify important claims "
-                "and do not claim that the Qwen executed or verified anything unless evidence exists.")
         if action=="status":
             from importlib.util import find_spec
             goals=cognitive_store.list_goals(limit=100); graph=brain.graph_summary()
@@ -145,7 +99,7 @@ def yon_brain(parameters: dict, player=None) -> str:
             return (f"Yon cognitive system initialized={brain.initialize()}; active_goals={len(goals)}; "
                 f"graph_nodes={graph.get('nodes',0)}; graph_edges={graph.get('edges',0)}; "
                 f"semantic_retrieval={semantic_state}.")
-        return "Unknown action. Use status, remember, search, validate, goal_add, goal_update, goal_list, checkpoint, depend, index, consolidate, relate, graph_sync, graph_status, reflect, consult_local or obsidian_export."
+        return "Unknown action. Use status, remember, search, validate, goal_add, goal_update, goal_list, checkpoint, depend, index, consolidate, relate, graph_sync, graph_status, reflect or obsidian_export."
     except Exception as exc:
         return f"Yon cognitive tool failed safely: {type(exc).__name__}: {exc}"
 
@@ -162,11 +116,11 @@ TOOL={
 "New memories are conservatively checked for related-topic links. Use graph_status to inspect the knowledge graph, graph_sync to refresh Obsidian, and obsidian_export to generate Markdown views; SQLite remains authoritative."),
 "tier":"core","brief":"Stores and retrieves memories, validates evidence, and tracks objectives/checkpoints.",
 "parameters":{"type":"OBJECT","properties":{
-"action":{"type":"STRING","enum":["status","remember","search","validate","goal_add","goal_update","goal_list","checkpoint","depend","index","consolidate","relate","graph_sync","graph_status","reflect","consult_local","local_status","obsidian_export"]},
+"action":{"type":"STRING","enum":["status","remember","search","validate","goal_add","goal_update","goal_list","checkpoint","depend","index","consolidate","relate","graph_sync","graph_status","reflect","obsidian_export"]},
 "content":{"type":"STRING"},"level":{"type":"STRING","enum":["working","episodic","semantic","consolidated"]},
 "source":{"type":"STRING"},"state":{"type":"STRING","enum":["confirmed","hypothesis","stale","contested","planned","active","blocked","completed","cancelled","in_progress"]},"evidence":{"type":"STRING"},
 "query":{"type":"STRING"},"memory_id":{"type":"INTEGER"},"title":{"type":"STRING"},
 "description":{"type":"STRING"},"priority":{"type":"INTEGER"},"goal_id":{"type":"INTEGER"},"depends_on_goal_id":{"type":"INTEGER"},
 "summary":{"type":"STRING"},"source_id":{"type":"INTEGER"},"target_id":{"type":"INTEGER"},
-"relation":{"type":"STRING"},"next_step":{"type":"STRING"},"request":{"type":"STRING"},"prompt":{"type":"STRING"},"model":{"type":"STRING"},"response_profile":{"type":"STRING","enum":["compact","analysis","code","review"]},"use_memory_context":{"type":"BOOLEAN"},"vault_path":{"type":"STRING"}},
+"relation":{"type":"STRING"},"next_step":{"type":"STRING"},"request":{"type":"STRING"},"vault_path":{"type":"STRING"}},
 "required":["action"]},"handler":yon_brain}
