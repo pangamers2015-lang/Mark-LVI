@@ -78,7 +78,7 @@ def _news(query: str = "") -> str:
 def web_search(parameters: dict, response=None, player=None, session_memory=None) -> str:
     params = parameters or {}
     query = str(params.get("query") or "").strip()
-    mode = str(params.get("mode") or "search").lower().strip()
+    mode = str(params.get("mode") or "auto").lower().strip()
     items = params.get("items") or []
     aspect = str(params.get("aspect") or "geral").strip() or "geral"
     if items and mode != "compare":
@@ -101,7 +101,7 @@ def web_search(parameters: dict, response=None, player=None, session_memory=None
             found = _weather(query)
         else:
             from actions.research_engine import research
-            found = research(query, mode="research" if mode in {"research", "deep"} else "search")
+            found = research(query, mode="research" if mode in {"research", "deep"} else ("auto" if mode == "auto" else "search"))
         if session_memory:
             try:
                 session_memory.set_last_search(query=query, response=found)
@@ -126,7 +126,7 @@ TOOL = {
         "Pesquisa nativa do Jarvis, sem delegar a FCC/Qwen/outros agentes. "
         "Usa LangGraph para orquestrar pesquisa rápida e profunda, Tavily como "
         "único mecanismo web e NVIDIA Nemotron para planejamento e síntese com "
-        "citações. Modos: search (rápida), news, research (aprofundada), price, "
+        "citações. Modos: auto (seleção automática), search (rápida), news, research (aprofundada), price, "
         "compare e weather (Open-Meteo). Requer NVIDIA_API_KEY e TAVILY_API_KEY "
         "ou as chaves nvidia_api_key e tavily_api_key em config/api_keys.json."
     ),
@@ -134,7 +134,7 @@ TOOL = {
         "type": "OBJECT",
         "properties": {
             "query": {"type": "STRING", "description": "Consulta ou assunto"},
-            "mode": {"type": "STRING", "description": "search | news | research | price | compare | weather"},
+            "mode": {"type": "STRING", "description": "auto | search | news | research | price | compare | weather"},
             "items": {"type": "ARRAY", "items": {"type": "STRING"}, "description": "Itens a comparar"},
             "aspect": {"type": "STRING", "description": "Critério de comparação"},
         },
