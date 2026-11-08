@@ -1,45 +1,32 @@
-import webbrowser
-from urllib.parse import quote_plus
+"""Weather action delegated to the single central Open-WebSearch service."""
 
 
-def weather_action(
-    parameters: dict,
-    player=None,
-    session_memory=None,
-) -> str:
-    city     = parameters.get("city")
-    when     = parameters.get("time", "today")  
-
-    if not city or not isinstance(city, str) or not city.strip():
-        msg = "Sir, the city is missing for the weather report."
+def weather_action(parameters: dict, player=None, session_memory=None) -> str:
+    params = parameters or {}
+    city = params.get("city")
+    when = str(params.get("time") or "today").strip()
+    if not isinstance(city, str) or not city.strip():
+        msg = "Informe a cidade para consultar a previsão do tempo."
         _log(msg, player)
         return msg
 
-    city = city.strip()
-    when = (when or "today").strip()
-
-    search_query  = f"weather in {city} {when}"
-    url           = f"https://www.google.com/search?q={quote_plus(search_query)}"
-
+    from actions.web_search import _weather
     try:
-        opened = webbrowser.open(url)
-        if not opened:
-            raise RuntimeError("webbrowser.open returned False")
-    except Exception as e:
-        msg = f"Sir, I couldn't open the browser for the weather report: {e}"
+        msg = _weather(f"previsão do tempo para {city.strip()} {when}")
+        _log(msg, player)
+        if session_memory:
+            try:
+                session_memory.set_last_search(
+                    query=f"previsão do tempo para {city.strip()} {when}",
+                    response=msg,
+                )
+            except Exception:
+                pass
+        return msg
+    except Exception as exc:
+        msg = f"Não foi possível consultar a previsão do tempo: {exc}"
         _log(msg, player)
         return msg
-
-    msg = f"Showing the weather for {city}, {when}, sir."
-    _log(msg, player)
-
-    if session_memory:
-        try:
-            session_memory.set_last_search(query=search_query, response=msg)
-        except Exception:
-            pass
-
-    return msg
 
 
 def _log(message: str, player=None) -> None:
@@ -51,21 +38,16 @@ def _log(message: str, player=None) -> None:
             pass
 
 
-# ── Tool declaration (auto-discovered by core/action_loader.py) ──────────────
 TOOL = {
     "name": "weather_report",
-    "description": "Gives the weather report to user",
+    "description": "Consulta a previsão usando o serviço central Open-Meteo integrado ao Open-WebSearch.",
     "parameters": {
         "type": "OBJECT",
         "properties": {
-            "city": {
-                "type": "STRING",
-                "description": "City name"
-            }
+            "city": {"type": "STRING", "description": "Nome da cidade"},
+            "time": {"type": "STRING", "description": "Período desejado"},
         },
-        "required": [
-            "city"
-        ]
+        "required": ["city"],
     },
     "handler": weather_action,
 }
