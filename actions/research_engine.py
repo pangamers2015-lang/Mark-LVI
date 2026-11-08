@@ -1,7 +1,7 @@
 """Native, citation-first web research for Jarvis.
 
 Architecture: LangGraph orchestration -> bounded shallow or multi-phase deep
-research -> Tavily (the sole web-search provider) -> NVIDIA Nemotron synthesis.
+research -> self-hosted Siftdog/SearXNG -> NVIDIA Nemotron synthesis.
 No FCC, Qwen, browser automation, or external agent is used by this pipeline.
 """
 from __future__ import annotations
@@ -18,7 +18,7 @@ from bs4 import BeautifulSoup
 from langgraph.graph import END, StateGraph
 
 NVIDIA_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
-TAVILY_URL = "https://api.tavily.com/search"
+SIFTDOG_DEFAULT_URL = "http://127.0.0.1:8000"
 DEFAULT_MODEL = "nvidia/nemotron-3-ultra-550b-a55b"
 TIMEOUT = (8, 55)
 MAX_RESULTS = 8
@@ -83,27 +83,37 @@ def _chat(messages: list[dict], *, max_tokens: int = 2200, temperature: float = 
     return content.strip()
 
 
-def _tavily_search(query: str, *, deep: bool = False, limit: int = 6) -> list[dict]:
-    key = _credential("TAVILY_API_KEY", "tavily_api_key")
-    if not key:
-        raise RuntimeError(
-            "Pesquisa web não configurada: adicione tavily_api_key em "
-            "config/api_keys.json ou defina TAVILY_API_KEY."
+def _siftdog_search(query: str, *, deep: bool = False, limit: int = 6, topic: str = "general") -> list[dict]:
+    """Query the local, self-hosted Siftdog API (Tavily-compatible, no paid key)."""
+    cfg = _keys()
+    base_url = str(
+        os.environ.get("SIFTDOG_URL") or cfg.get("siftdog_url") or SIFTDOG_DEFAULT_URL
+    ).strip().rstrip("/") or SIFTDOG_DEFAULT_URL
+    key = _credential("SIFTDOG_API_KEY", "siftdog_api_key")
+    headers = {"Content-Type": "application/json"}
+    if key:
+        headers["Authorization"] = f"Bearer {key}"
+    try:
+        response = requests.post(
+            f"{base_url}/search",
+            headers=headers,
+            json={
+                "query": query,
+                "search_depth": "advanced" if deep else "basic",
+                "topic": topic if topic in {"general", "news"} else "general",
+                "max_results": max(1, min(limit, 10)),
+                "include_answer": False,
+                "include_raw_content": "markdown",
+            },
+            timeout=TIMEOUT,
         )
-    response = requests.post(
-        TAVILY_URL,
-        json={
-            "api_key": key,
-            "query": query,
-            "search_depth": "advanced" if deep else "basic",
-            "topic": "general",
-            "max_results": max(1, min(limit, 10)),
-            "include_answer": False,
-            "include_raw_content": "markdown",
-        },
-        timeout=TIMEOUT,
-    )
-    response.raise_for_status()
+        response.raise_for_status()
+    except requests.RequestException as exc:
+        raise RuntimeError(
+            f"Não foi possível acessar o Siftdog em {base_url}. "
+            "Inicie o serviço com scripts/start_siftdog.ps1 e confira se o Docker Desktop está ativo. "
+            f"Detalhe: {exc}"
+        ) from exc
     data = response.json()
     results = []
     for item in data.get("results") or []:
@@ -117,6 +127,7 @@ def _tavily_search(query: str, *, deep: bool = False, limit: int = 6) -> list[di
             "content": str(item.get("content") or "")[:5000],
             "raw_content": str(item.get("raw_content") or "")[:MAX_PAGE_CHARS],
             "score": item.get("score"),
+            "published_date": item.get("published_date"),
         })
     return results
 
@@ -166,9 +177,9 @@ def _orchestrate(state: ResearchState) -> dict:
 
 
 def _shallow_research(state: ResearchState) -> dict:
-    results = _tavily_search(state["query"], deep=False, limit=6)
+    results = _siftdog_search(state["query"], deep=False, limit=6)
     if not results:
-        raise RuntimeError("Tavily não encontrou fontes para essa consulta.")
+        raise RuntimeError("Siftdog não encontrou fontes para essa consulta.")
     with ThreadPoolExecutor(max_workers=4) as pool:
         notes = list(pool.map(_read_page, results[:4]))
     prompt = (
@@ -214,9 +225,9 @@ def _plan_deep(state: ResearchState) -> dict:
 def _deep_search(state: ResearchState) -> dict:
     queries = state.get("plan") or [state["query"]]
     gathered = []
-    # Bounded parallel workers: one Tavily provider, several independent research angles.
+    # Bounded parallel workers: one Siftdog provider, several independent research angles.
     with ThreadPoolExecutor(max_workers=min(4, len(queries))) as pool:
-        futures = {pool.submit(_tavily_search, q, deep=True, limit=5): q for q in queries}
+        futures = {pool.submit(_siftdog_search, q, deep=True, limit=5): q for q in queries}
         failures = []
         for future in as_completed(futures):
             try:
@@ -227,7 +238,7 @@ def _deep_search(state: ResearchState) -> dict:
     if not results and failures:
         raise RuntimeError("Todas as consultas de pesquisa falharam: " + "; ".join(failures[:2]))
     if not results:
-        raise RuntimeError("Tavily não encontrou fontes para a pesquisa aprofundada.")
+        raise RuntimeError("Siftdog não encontrou fontes para a pesquisa aprofundada.")
     with ThreadPoolExecutor(max_workers=6) as pool:
         notes = list(pool.map(_read_page, results[:8]))
     return {"results": results, "notes": notes}
@@ -309,4 +320,4 @@ def research(query: str, mode: str = "search") -> str:
 
 def search_sources(query: str, limit: int = 5) -> list[dict]:
     """Structured, bounded source lookup for background monitoring and internal tools."""
-    return _tavily_search(query, deep=False, limit=limit)
+    return _siftdog_search(query, deep=False, limit=limit)
