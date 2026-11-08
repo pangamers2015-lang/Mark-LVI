@@ -1,32 +1,35 @@
-# Jarvis — voz e Orb
+# Jarvis — Orb e conversa por voz
 
-Aplicativo independente para Windows. Esta versão tem somente a interface Orb e conversa por voz com Gemini Live.
+Versão independente para Windows: abre a interface Orb e conversa por voz em tempo real com o Gemini Live.
 
-## Iniciar
+## Como usar
 
-1. Instale Python 3.11 ou superior (marque **Add Python to PATH**).
-2. Dê duplo clique em `INICIAR_JARVIS.bat`.
-3. Na primeira abertura, informe sua chave da API Gemini.
-4. Aguarde a conexão e converse normalmente.
+1. Baixe o pacote **Jarvis-Windows** e extraia a pasta.
+2. Abra **Jarvis.exe**.
+3. Na primeira execução, cole sua chave da API Gemini e clique em **Conectar**.
+4. Autorize o acesso ao microfone do Windows, se solicitado.
 
-O inicializador cria o ambiente virtual local e instala as dependências de `requirements.txt` automaticamente.
+Não é necessário instalar Python nem abrir o PowerShell. A chave fica salva no Gerenciador de Credenciais do Windows, não dentro da pasta.
 
-## Escopo desta versão
+## Esta versão inclui
 
-- Janela desktop com a Orb de partículas baseada no visual já existente no projeto.
-- Microfone contínuo e resposta falada pelo Gemini Live.
-- Interrupção de áudio quando o serviço sinaliza que o usuário interrompeu.
-- Chave Gemini guardada no Gerenciador de Credenciais do Windows por meio do keyring.
-- Nenhuma ferramenta, comando do sistema, automação ou integração com ChatGPT.
+- Interface Orb de partículas em janela desktop.
+- Conversa por voz em português brasileiro, com microfone contínuo.
+- Respostas faladas pelo Gemini Live.
+- Voz masculina **Algieba** (estilo suave).
+- Interrupção da fala quando o Gemini sinaliza que o usuário começou a falar.
+- Chave da API protegida pelo Gerenciador de Credenciais do Windows.
 
-## Dependências
+## Requisitos
 
-- Python 3.11+
-- Microsoft Edge WebView2 Runtime (normalmente já presente no Windows 10 atualizado)
-- Pacotes Python listados em `requirements.txt` (instalados pelo inicializador)
+- Windows 10 ou 11 de 64 bits.
+- Conexão com a internet.
+- Chave válida da API Gemini com acesso ao Gemini Live.
+- Microfone e saída de áudio.
+- Microsoft Edge WebView2 Runtime (normalmente já instalado junto ao Microsoft Edge).
 
-É necessária uma chave da API Gemini e conexão com a internet. O uso da API pode estar sujeito às cotas e condições da conta Google. O Gemini Live pode acelerar a cadência em respostas muito longas; por isso, o Jarvis está instruído a responder de forma mais concisa e conversacional.
+Esta edição não inclui ferramentas, comandos do sistema, automações nem integração com ChatGPT. O uso da API está sujeito às cotas e condições da conta Google.
 
-## Observações
+## Se não abrir
 
-Este primeiro pacote é um lançador de desenvolvimento. A reprodução mantém uma fila de áudio com backpressure para não descartar blocos quando o dispositivo atrasa; a fila só é esvaziada quando o próprio Gemini sinaliza uma interrupção. O receptor permanece ativo entre turnos da mesma sessão. Depois de validar voz, microfone e interface no computador de destino, a etapa seguinte será empacotar a aplicação em um `.exe` independente.
+Confira se o Microsoft Edge WebView2 Runtime está instalado e se o Windows permite acesso ao microfone. A primeira conexão também depende da chave Gemini e da disponibilidade do serviço.
