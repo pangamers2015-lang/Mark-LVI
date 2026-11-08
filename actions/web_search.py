@@ -1,7 +1,7 @@
 """Jarvis native web-research action.
 
 The public TOOL contract remains stable for the live action loader. Search and
-research are implemented internally with LangGraph, Tavily, and NVIDIA Nemotron.
+research are implemented internally with LangGraph, self-hosted Siftdog, and NVIDIA Nemotron.
 Open-Meteo remains a separate weather data API, not a second web-search engine.
 """
 from core import outcome
@@ -124,11 +124,11 @@ TOOL = {
     "name": "web_search",
     "description": (
         "Pesquisa nativa do Jarvis, sem delegar a FCC/Qwen/outros agentes. "
-        "Usa LangGraph para orquestrar pesquisa rápida e profunda, Tavily como "
-        "único mecanismo web e NVIDIA Nemotron para planejamento e síntese com "
-        "citações. Modos: auto (seleção automática), search (rápida), news, research (aprofundada), price, "
-        "compare e weather (Open-Meteo). Requer NVIDIA_API_KEY e TAVILY_API_KEY "
-        "ou as chaves nvidia_api_key e tavily_api_key em config/api_keys.json."
+        "Usa LangGraph para orquestrar pesquisa rápida e profunda, Siftdog "
+        "auto-hospedado como mecanismo web e NVIDIA Nemotron para planejamento "
+        "e síntese com citações. Modos: auto, search, news, research, price, "
+        "compare e weather (Open-Meteo). Requer NVIDIA_API_KEY e o serviço "
+        "Siftdog local ativo em http://127.0.0.1:8000."
     ),
     "parameters": {
         "type": "OBJECT",
