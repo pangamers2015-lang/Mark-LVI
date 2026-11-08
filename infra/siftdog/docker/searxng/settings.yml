@@ -1,0 +1,26 @@
+use_default_settings: true
+
+server:
+  secret_key: "jarvis-local-siftdog-change-this-secret"
+  limiter: false
+  image_proxy: false
+
+search:
+  safe_search: 0
+  formats:
+    - html
+    - json
+
+engines:
+  - name: google
+    disabled: false
+  - name: startpage
+    disabled: false
+    inactive: false
+  - name: yahoo
+    disabled: false
+  - name: duckduckgo web
+    disabled: false
+  - name: mojeek
+    disabled: false
+    inactive: false
