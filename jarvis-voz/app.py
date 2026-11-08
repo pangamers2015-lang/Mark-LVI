@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parent
 UI = ROOT / "ui" / "index.html"
 SERVICE = "JarvisVoice"
 ACCOUNT = "gemini-api-key"
-MODEL = "models/gemini-3.1-flash-live-preview"
+MODEL = "gemini-3.8-live"
 MIC_RATE = 16_000
 SPEAKER_RATE = 24_000
 CHUNK = 512  # 32 ms at 16 kHz, within Gemini Live's 20–40 ms guidance
@@ -152,7 +152,7 @@ class JarvisApi:
                     "system_instruction": SYSTEM_PROMPT,
                     "speech_config": {
                         "voice_config": {
-                            "prebuilt_voice_config": {"voice_name": "Aoede"}
+                            "prebuilt_voice_config": {"voice_name": "Algieba"}
                         }
                     },
                 }
