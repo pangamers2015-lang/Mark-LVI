@@ -126,7 +126,7 @@ def check_all() -> list[str]:
             )
             # Reuse the central provider output; extract its first result and source.
             import re
-            match = re.search(r"(?m)^1\\. (.+)$", results_text)
+            match = re.search(r"(?m)^1[.] (.+)$", results_text)
             if not match:
                 monitors[slug]["last_check"] = today
                 changed = True
